@@ -69,11 +69,7 @@ body {
 
 /* ─── CANVAS ─── */
 #three-canvas {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  z-index: 0;
-  pointer-events: none;
+  display: none;
 }
 
 /* ─── NOISE + GRID ─── */
@@ -1067,6 +1063,17 @@ footer {
 /* ─── MAGNETIC ELEMENTS ─── */
 .magnetic { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 
+/* ─── HERO CHART BACKGROUND ─── */
+#hero-chart-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 2s ease;
+}
+
 /* ─── HAMBURGER ─── */
 .hamburger {
   display: none;
@@ -1326,6 +1333,7 @@ body.nav-open .hamburger span:nth-child(3) {
 
   <!-- HERO -->
   <section class="hero" id="hero">
+    <canvas id="hero-chart-bg"></canvas>
     <div class="glow-orb glow-1" data-parallax="0.04"></div>
     <div class="glow-orb glow-2" data-parallax="-0.03"></div>
     <div class="glow-orb glow-3" data-parallax="0.05"></div>
@@ -2215,6 +2223,232 @@ if (statShowcase) bigStatsObserver.observe(statShowcase);
     renderer.render(scene, camera);
   }
   animate();
+})();
+
+// ═══════════════════════════════════════
+// HERO BACKGROUND TRADING CHART
+// ═══════════════════════════════════════
+(function () {
+  const canvas = document.getElementById('hero-chart-bg');
+  const ctx = canvas.getContext('2d');
+
+  // OHLC candles — simulates a NIFTY intraday emotional trading session
+  const candles = [
+    { o:22392, h:22448, l:22378, c:22435 },
+    { o:22435, h:22482, l:22420, c:22470 },
+    { o:22470, h:22515, l:22458, c:22505 },  // ← BUY entry
+    { o:22505, h:22552, l:22492, c:22542 },
+    { o:22542, h:22590, l:22528, c:22578 },
+    { o:22578, h:22628, l:22565, c:22618 },
+    { o:22618, h:22658, l:22600, c:22648 },  // ← SELL +₹4,200
+    { o:22648, h:22665, l:22595, c:22608 },  // doji top
+    { o:22608, h:22628, l:22555, c:22568 },  // ← REVENGE BUY (bad entry)
+    { o:22568, h:22582, l:22505, c:22518 },
+    { o:22518, h:22535, l:22458, c:22472 },
+    { o:22472, h:22490, l:22408, c:22422 },
+    { o:22422, h:22445, l:22355, c:22368 },  // ← TILT SELL -₹6,800
+    { o:22368, h:22392, l:22318, c:22332 },  // ← REVENGE BUY again
+    { o:22332, h:22358, l:22288, c:22302 },
+    { o:22302, h:22328, l:22268, c:22282 },  // ← SELL -₹2,400
+    { o:22282, h:22322, l:22268, c:22315 },
+    { o:22315, h:22355, l:22302, c:22348 },
+    { o:22348, h:22388, l:22335, c:22378 },  // ← disciplined BUY
+    { o:22378, h:22418, l:22365, c:22408 },
+    { o:22408, h:22448, l:22395, c:22438 },
+    { o:22438, h:22478, l:22425, c:22468 },
+    { o:22468, h:22508, l:22455, c:22498 },  // ← SELL +₹1,800
+    { o:22498, h:22525, l:22485, c:22515 },
+    { o:22515, h:22552, l:22502, c:22542 },  // ← disciplined BUY
+    { o:22542, h:22578, l:22528, c:22568 },
+    { o:22568, h:22605, l:22555, c:22595 },
+    { o:22595, h:22635, l:22582, c:22622 },  // ← SELL +₹2,600
+  ];
+
+  const trades = [
+    { idx: 2,  type: 'buy' },
+    { idx: 6,  type: 'sell', pnl: '+₹4,200' },
+    { idx: 8,  type: 'buy',  tag: 'REVENGE' },
+    { idx: 12, type: 'sell', pnl: '-₹6,800', tag: 'TILT' },
+    { idx: 13, type: 'buy',  tag: 'REVENGE' },
+    { idx: 15, type: 'sell', pnl: '-₹2,400' },
+    { idx: 18, type: 'buy' },
+    { idx: 22, type: 'sell', pnl: '+₹1,800' },
+    { idx: 24, type: 'buy' },
+    { idx: 27, type: 'sell', pnl: '+₹2,600' },
+  ];
+
+  const allLows  = candles.map(c => c.l);
+  const allHighs = candles.map(c => c.h);
+  const minP = Math.min(...allLows);
+  const maxP = Math.max(...allHighs);
+  const pRange = maxP - minP;
+
+  const dpr = window.devicePixelRatio || 1;
+  let W = 0, H = 0, rafId = null, visibleCount = 0;
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    W = rect.width; H = rect.height;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function toY(price) {
+    const padT = H * 0.15, padB = H * 0.22;
+    return padT + (1 - (price - minP) / pRange) * (H - padT - padB);
+  }
+
+  function candleX(idx) {
+    const padX = W * 0.04;
+    const total = candles.length;
+    const slotW = (W - padX * 2) / total;
+    return padX + idx * slotW + slotW / 2;
+  }
+
+  function candleWidth() {
+    const padX = W * 0.04;
+    return Math.max(4, ((W - padX * 2) / candles.length) * 0.55);
+  }
+
+  function draw(count) {
+    ctx.clearRect(0, 0, W, H);
+
+    // Horizontal grid lines
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+      const padT = H * 0.15, padB = H * 0.22;
+      const y = padT + (i / 5) * (H - padT - padB);
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.beginPath();
+      ctx.moveTo(W * 0.04, y);
+      ctx.lineTo(W * 0.96, y);
+      ctx.stroke();
+      // Price label on right
+      const price = Math.round(maxP - (i / 5) * pRange);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.font = `${Math.max(9, W * 0.009)}px monospace`;
+      ctx.textAlign = 'right';
+      ctx.fillText(price, W * 0.97, y + 4);
+    }
+    ctx.textAlign = 'left';
+
+    const cw = candleWidth();
+
+    // Draw candles up to count
+    for (let i = 0; i < count; i++) {
+      const c = candles[i];
+      const x  = candleX(i);
+      const yH = toY(c.h);
+      const yL = toY(c.l);
+      const yO = toY(c.o);
+      const yC = toY(c.c);
+      const bull = c.c >= c.o;
+      const color = bull ? 'rgba(0,230,118,0.75)' : 'rgba(255,107,107,0.75)';
+      const glowColor = bull ? '#00E676' : '#FF6B6B';
+
+      // Wick
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, yH);
+      ctx.lineTo(x, yL);
+      ctx.stroke();
+
+      // Body
+      const bodyTop = Math.min(yO, yC);
+      const bodyH   = Math.max(2, Math.abs(yC - yO));
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur  = 4;
+      ctx.fillStyle   = color;
+      ctx.fillRect(x - cw / 2, bodyTop, cw, bodyH);
+      ctx.shadowBlur  = 0;
+    }
+
+    // Trade markers over candles
+    trades.forEach(t => {
+      if (t.idx >= count) return;
+      const c  = candles[t.idx];
+      const x  = candleX(t.idx);
+      const isBuy  = t.type === 'buy';
+      const isLoss = t.pnl && t.pnl.startsWith('-');
+      const color  = isBuy ? '#00E676' : (isLoss ? '#FF6B6B' : '#00E676');
+      const sz = Math.max(6, cw * 0.7);
+
+      // Anchor triangle just below low (buy) or above high (sell)
+      const anchorY = isBuy ? toY(c.l) + sz * 1.6 : toY(c.h) - sz * 1.6;
+      ctx.shadowColor = color;
+      ctx.shadowBlur  = isLoss ? 22 : 12;
+      ctx.fillStyle   = color;
+      ctx.beginPath();
+      if (isBuy) {
+        ctx.moveTo(x,        anchorY - sz * 1.4);
+        ctx.lineTo(x - sz,   anchorY);
+        ctx.lineTo(x + sz,   anchorY);
+      } else {
+        ctx.moveTo(x,        anchorY + sz * 1.4);
+        ctx.lineTo(x - sz,   anchorY);
+        ctx.lineTo(x + sz,   anchorY);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // P&L label
+      if (t.pnl) {
+        const fs = Math.max(9, W * 0.009);
+        ctx.font        = `bold ${fs}px monospace`;
+        ctx.fillStyle   = color;
+        ctx.shadowColor = color; ctx.shadowBlur = 6;
+        const lx = x > W * 0.82 ? x - 58 : x + sz + 4;
+        const ly = isBuy ? anchorY + 14 : anchorY - 6;
+        ctx.fillText(t.pnl, lx, ly);
+        ctx.shadowBlur = 0;
+      }
+
+      // REVENGE / TILT tag
+      if (t.tag) {
+        const fs = Math.max(8, W * 0.008);
+        ctx.font        = `bold ${fs}px sans-serif`;
+        ctx.fillStyle   = 'rgba(255,107,107,0.95)';
+        ctx.shadowColor = '#FF6B6B'; ctx.shadowBlur = 8;
+        const lx = x > W * 0.82 ? x - 58 : x - sz - 2;
+        const ly = isBuy ? anchorY + 26 : anchorY - 18;
+        ctx.fillText(t.tag, lx, ly);
+        ctx.shadowBlur = 0;
+      }
+    });
+  }
+
+  // Animate candles popping in one by one, then loop
+  function animateChart() {
+    if (visibleCount >= candles.length) {
+      draw(candles.length);
+      rafId = setTimeout(() => {
+        visibleCount = 0;
+        animateChart();
+      }, 1800);
+      return;
+    }
+    visibleCount++;
+    draw(visibleCount);
+    rafId = setTimeout(() => requestAnimationFrame(animateChart), 90);
+  }
+
+  function init() {
+    resize();
+    canvas.style.opacity = '0.22';
+    setTimeout(animateChart, 800);
+  }
+
+  if (document.readyState === 'complete') { init(); }
+  else { window.addEventListener('load', init); }
+
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(rafId);
+    resize();
+    draw(visibleCount);
+  });
 })();
 </script>
 
