@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ALGOBOT - Algorithmic Trading System
 
 A comprehensive algorithmic trading platform built with Flask, integrated with Zerodha Kite Connect API for live and paper trading.
@@ -360,4 +361,6 @@ This software is provided for educational purposes only. The creators assume no 
 **Built with Flask, Zerodha Kite Connect, and Chart.js**
 "# mlbroker" 
 "# mlbroker" 
+=======
+>>>>>>> 8c0d705 (first commit)
 "# mlbroker" 
