@@ -1,0 +1,2017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlphaPilot — Your Trading Copilot</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #06060B;
+  --bg2: #0C0C14;
+  --bg3: #12121E;
+  --accent: #00F0FF;
+  --accent2: #7B61FF;
+  --accent3: #FF6B6B;
+  --green: #00E676;
+  --text: #E8E6F0;
+  --text2: #8A8899;
+  --text3: #5A5868;
+  --card-bg: rgba(18, 18, 30, 0.6);
+  --glass: rgba(255,255,255,0.03);
+  --border: rgba(255,255,255,0.06);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+::selection { background: var(--accent2); color: #fff; }
+
+/* ─── CUSTOM CURSOR ─── */
+.cursor {
+  position: fixed;
+  width: 20px; height: 20px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transition: transform 0.15s ease, width 0.3s, height 0.3s, border-color 0.3s, background 0.3s;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: difference;
+}
+
+.cursor.hovering {
+  width: 50px; height: 50px;
+  background: rgba(0,240,255,0.1);
+  border-color: var(--accent2);
+}
+
+.cursor-dot {
+  position: fixed;
+  width: 5px; height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.3s;
+}
+
+/* ─── CANVAS ─── */
+#three-canvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ─── NOISE + GRID ─── */
+.noise {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1; pointer-events: none; opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px;
+}
+
+.grid-bg {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 80px 80px;
+}
+
+/* ─── PROGRESS BAR ─── */
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+  z-index: 9998;
+  width: 0%;
+  transition: width 0.05s linear;
+}
+
+/* ─── CUSTOM SCROLLBAR ─── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent2); }
+* { scrollbar-width: thin; scrollbar-color: var(--accent2) var(--bg); }
+
+/* ─── CONTENT ─── */
+.content { position: relative; z-index: 2; }
+
+/* ─── NAV ─── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 1.2rem 3rem;
+  display: flex; align-items: center; justify-content: space-between;
+  backdrop-filter: blur(20px);
+  background: rgba(6,6,11,0.7);
+  border-bottom: 1px solid var(--border);
+  transform: translateY(0);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+nav.hidden { transform: translateY(-100%); }
+
+.logo {
+  font-family: 'Syne', sans-serif; font-weight: 800;
+  font-size: 1.4rem; letter-spacing: -0.5px;
+  display: flex; align-items: center; gap: 0.6rem;
+}
+
+.logo-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  padding: 5px;
+  animation: logoSpin 8s linear infinite;
+  flex-shrink: 0;
+}
+
+.logo-icon svg { width: 100%; height: 100%; display: block; }
+
+@keyframes logoSpin {
+  0% { transform: rotateY(0); }
+  100% { transform: rotateY(360deg); }
+}
+
+.nav-links { display: flex; gap: 2.5rem; list-style: none; }
+
+.nav-links a {
+  color: var(--text2); text-decoration: none;
+  font-size: 0.88rem; font-weight: 500; letter-spacing: 0.3px;
+  transition: color 0.3s; position: relative; cursor: none;
+}
+
+.nav-links a::after {
+  content: ''; position: absolute;
+  bottom: -4px; left: 0;
+  width: 0; height: 2px;
+  background: var(--accent); transition: width 0.3s;
+}
+
+.nav-links a:hover { color: var(--text); }
+.nav-links a:hover::after { width: 100%; }
+
+.nav-cta {
+  padding: 0.6rem 1.6rem;
+  border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 100px; font-size: 0.85rem;
+  font-weight: 600; font-family: 'DM Sans', sans-serif;
+  cursor: none; background: transparent;
+  transition: all 0.3s; letter-spacing: 0.3px;
+}
+
+.nav-cta:hover {
+  background: var(--accent); color: var(--bg);
+  box-shadow: 0 0 40px rgba(0,240,255,0.3);
+}
+
+/* ─── HERO ─── */
+.hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  text-align: center;
+  padding: 8rem 2rem 4rem;
+  position: relative;
+}
+
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 1.2rem; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--glass);
+  font-size: 0.78rem; color: var(--accent);
+  font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;
+  margin-bottom: 2rem;
+  opacity: 0; transform: translateY(-20px);
+}
+
+.badge-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  font-weight: 800; line-height: 1.05;
+  letter-spacing: -2px; margin-bottom: 1.5rem;
+  opacity: 0;
+}
+
+/* Split text animation */
+.char {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(60px) rotateX(-40deg);
+  animation: charReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: bottom;
+}
+
+@keyframes charReveal {
+  to { opacity: 1; transform: translateY(0) rotateX(0); }
+}
+
+.word { display: inline-block; white-space: pre; }
+
+.gradient-text {
+  display: inline;
+}
+
+.gradient-text .char {
+  background: linear-gradient(135deg, var(--accent), var(--accent2), var(--accent3));
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: charReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards, gradientShift 4s ease infinite;
+}
+
+/* Fallback: if gradient-text has no .char children (e.g. CTA section) */
+.gradient-text:not(:has(.char)) {
+  background: linear-gradient(135deg, var(--accent), var(--accent2), var(--accent3));
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 4s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.hero-sub {
+  font-size: 1.15rem; color: var(--text2);
+  max-width: 580px; line-height: 1.7;
+  margin-bottom: 2.5rem;
+  opacity: 0; transform: translateY(30px);
+}
+
+.hero-actions {
+  display: flex; gap: 1rem;
+  opacity: 0; transform: translateY(30px);
+}
+
+.btn-primary {
+  padding: 0.85rem 2.2rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: var(--bg); border: none; border-radius: 100px;
+  font-size: 0.95rem; font-weight: 700;
+  font-family: 'DM Sans', sans-serif; cursor: none;
+  transition: all 0.3s; letter-spacing: 0.3px;
+  position: relative; overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute; top: 50%; left: 50%;
+  width: 0; height: 0;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 0.5s, height 0.5s;
+}
+
+.btn-primary:hover::before { width: 300px; height: 300px; }
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 40px rgba(0,240,255,0.35);
+}
+
+.btn-secondary {
+  padding: 0.85rem 2.2rem;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border); border-radius: 100px;
+  font-size: 0.95rem; font-weight: 500;
+  font-family: 'DM Sans', sans-serif; cursor: none;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  border-color: var(--text3);
+  background: var(--glass);
+}
+
+.hero-stats {
+  display: flex; gap: 3rem;
+  margin-top: 4rem; padding-top: 3rem;
+  border-top: 1px solid var(--border);
+  opacity: 0; transform: translateY(30px);
+}
+
+.stat-item { text-align: center; }
+
+.stat-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem; font-weight: 700; color: var(--accent);
+}
+
+.stat-label {
+  font-size: 0.78rem; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 1px; margin-top: 0.3rem;
+}
+
+/* ─── SCROLL INDICATOR ─── */
+.scroll-indicator {
+  position: absolute; bottom: 2rem; left: 50%;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column;
+  align-items: center; gap: 0.5rem;
+  opacity: 0;
+}
+
+.scroll-mouse {
+  width: 24px; height: 38px;
+  border: 2px solid var(--text3); border-radius: 12px;
+  position: relative;
+}
+
+.scroll-dot {
+  width: 3px; height: 8px;
+  background: var(--accent); border-radius: 3px;
+  position: absolute; top: 6px; left: 50%;
+  transform: translateX(-50%);
+  animation: scrollAnim 2s infinite;
+}
+
+@keyframes scrollAnim {
+  0% { opacity: 1; top: 6px; }
+  100% { opacity: 0; top: 22px; }
+}
+
+.scroll-text {
+  font-size: 0.65rem; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 2px;
+}
+
+/* ─── SECTION BASE ─── */
+section { padding: 7rem 3rem; position: relative; }
+
+.section-label {
+  font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 3px; color: var(--accent2);
+  font-weight: 600; margin-bottom: 1rem;
+}
+
+.section-title {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700; letter-spacing: -1px; margin-bottom: 1rem;
+}
+
+.section-desc {
+  color: var(--text2); font-size: 1.05rem;
+  max-width: 550px; line-height: 1.7;
+}
+
+/* ─── PARALLAX LAYERS ─── */
+.parallax-layer {
+  will-change: transform;
+  transition: transform 0.1s linear;
+}
+
+[data-parallax] {
+  will-change: transform;
+}
+
+/* ─── GLOW ORBS (PARALLAX) ─── */
+.glow-orb {
+  position: absolute; border-radius: 50%;
+  pointer-events: none; filter: blur(80px);
+}
+
+.glow-1 { width: 500px; height: 500px; background: rgba(0,240,255,0.07); top: 5%; right: -150px; }
+.glow-2 { width: 400px; height: 400px; background: rgba(123,97,255,0.07); top: 55%; left: -150px; }
+.glow-3 { width: 350px; height: 350px; background: rgba(255,107,107,0.05); top: 35%; right: 20%; }
+
+/* ─── MARQUEE ─── */
+.marquee-section {
+  padding: 2rem 0;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.marquee-item {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.1rem; font-weight: 600;
+  color: var(--text3);
+  padding: 0 2.5rem;
+  white-space: nowrap;
+  display: flex; align-items: center; gap: 0.8rem;
+}
+
+.marquee-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ─── PROBLEM SECTION ─── */
+.problem {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 4rem; align-items: center;
+  max-width: 1200px; margin: 0 auto;
+}
+
+.problem-stats {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1rem; margin-top: 2rem;
+}
+
+.problem-stat {
+  padding: 1.5rem; border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+  perspective: 800px;
+}
+
+.problem-stat:hover {
+  border-color: rgba(255,107,107,0.3);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+}
+
+.problem-stat .big {
+  font-family: 'Syne', sans-serif;
+  font-size: 2.2rem; font-weight: 800; color: var(--accent3);
+}
+
+.problem-stat .label {
+  font-size: 0.82rem; color: var(--text2);
+  margin-top: 0.3rem; line-height: 1.4;
+}
+
+.problem-visual {
+  position: relative;
+  display: flex; flex-direction: column; gap: 1rem;
+  justify-content: center;
+}
+
+.loss-chart {
+  width: 100%; height: 220px;
+  background: var(--card-bg); border-radius: 20px;
+  border: 1px solid var(--border);
+  padding: 1.4rem 1.6rem; position: relative; overflow: hidden;
+}
+
+.loss-chart.win-chart { border-color: rgba(0,230,118,0.2); }
+.loss-chart.win-chart::before {
+  background: radial-gradient(circle, rgba(0,230,118,0.08), transparent) !important;
+}
+
+.chart-badge.green {
+  background: rgba(0,230,118,0.15); color: var(--green);
+}
+
+.loss-chart::before {
+  content: ''; position: absolute;
+  top: 0; right: 0;
+  width: 250px; height: 250px;
+  background: radial-gradient(circle, rgba(255,107,107,0.1), transparent);
+  pointer-events: none;
+}
+
+.chart-header {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 1.5rem;
+}
+
+.chart-title { font-weight: 600; font-size: 0.9rem; }
+
+.chart-badge {
+  padding: 0.25rem 0.7rem; border-radius: 100px;
+  background: rgba(255,107,107,0.15); color: var(--accent3);
+  font-size: 0.72rem; font-weight: 600;
+}
+
+.chart-bars {
+  display: flex; align-items: flex-end; gap: 8px;
+  height: 130px; padding-top: 10px;
+}
+
+.chart-bar {
+  flex: 1; border-radius: 6px 6px 0 0;
+  position: relative;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom;
+  animation: barGrow 1s ease-out var(--delay, 0s) both;
+}
+
+.chart-bar:hover { filter: brightness(1.3); transform: scaleY(1.05); }
+
+@keyframes barGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+.chart-bar .tooltip {
+  position: absolute; top: -32px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.68rem; color: var(--text);
+  white-space: nowrap; opacity: 0;
+  background: var(--bg3); padding: 3px 8px;
+  border-radius: 6px; transition: all 0.2s;
+  pointer-events: none;
+}
+
+.chart-bar:hover .tooltip { opacity: 1; top: -36px; }
+
+/* ─── HORIZONTAL SCROLL FEATURES ─── */
+.features-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.features-sticky {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.features-header {
+  text-align: center; margin-bottom: 3rem;
+}
+
+.features-header .section-desc { margin: 0.8rem auto 0; }
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.2rem;
+}
+
+.feature-card {
+  padding: 2rem; border-radius: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative; overflow: hidden;
+  transform-style: preserve-3d;
+}
+
+.feature-card::before {
+  content: ''; position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  opacity: 0; transition: opacity 0.4s;
+}
+
+.feature-card::after {
+  content: ''; position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(0,240,255,0.06) 0%, transparent 50%);
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.4s;
+}
+
+.feature-card:hover {
+  border-color: rgba(0,240,255,0.2);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+}
+
+.feature-card:hover::before { opacity: 1; }
+.feature-card:hover::after { opacity: 1; }
+
+.feature-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; margin-bottom: 1.2rem;
+  transition: transform 0.4s;
+}
+
+.feature-card:hover .feature-icon { transform: scale(1.15) rotate(-5deg); }
+
+.fi-cyan { background: rgba(0,240,255,0.1); }
+.fi-purple { background: rgba(123,97,255,0.1); }
+.fi-red { background: rgba(255,107,107,0.1); }
+.fi-green { background: rgba(0,230,118,0.1); }
+
+.feature-card h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.15rem; font-weight: 700;
+  margin-bottom: 0.6rem; letter-spacing: -0.3px;
+}
+
+.feature-card p {
+  font-size: 0.88rem; color: var(--text2); line-height: 1.65;
+}
+
+/* ─── BIG TEXT PARALLAX ─── */
+.big-text-section {
+  padding: 10rem 3rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.big-text {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(3rem, 8vw, 7rem);
+  font-weight: 800; line-height: 1.1;
+  letter-spacing: -3px;
+  opacity: 0.06;
+  position: absolute;
+  white-space: nowrap;
+  left: 0;
+}
+
+.big-text-1 { top: 15%; }
+.big-text-2 { top: 45%; }
+.big-text-3 { top: 75%; }
+
+.big-text-content {
+  position: relative; z-index: 2;
+}
+
+.big-text-content .stat-showcase {
+  display: flex; gap: 4rem;
+  justify-content: center; align-items: center;
+  flex-wrap: wrap;
+}
+
+.stat-big {
+  text-align: center;
+}
+
+.stat-big-num {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(3rem, 6vw, 5rem);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stat-big-num.cyan { color: var(--accent); }
+.stat-big-num.purple { color: var(--accent2); }
+.stat-big-num.red { color: var(--accent3); }
+.stat-big-num.green { color: var(--green); }
+
+.stat-big-label {
+  font-size: 0.85rem; color: var(--text2);
+  margin-top: 0.5rem; letter-spacing: 0.5px;
+}
+
+/* ─── HOW IT WORKS ─── */
+.how-it-works {
+  max-width: 1200px; margin: 0 auto;
+}
+
+.how-header {
+  text-align: center; margin-bottom: 4rem;
+}
+
+.how-header .section-desc { margin: 0.8rem auto 0; }
+
+.steps { display: flex; gap: 1.5rem; position: relative; }
+
+.step {
+  flex: 1; padding: 2rem 1.8rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border); border-radius: 20px;
+  position: relative;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(10px);
+  transform-style: preserve-3d;
+}
+
+.step:hover {
+  transform: translateY(-8px) rotateX(2deg);
+  border-color: rgba(123,97,255,0.3);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+}
+
+.step-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 3.5rem; font-weight: 800;
+  line-height: 1; margin-bottom: 1rem;
+  background: linear-gradient(180deg, rgba(123,97,255,0.25), transparent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.step h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.1rem; font-weight: 700;
+  margin-bottom: 0.6rem;
+}
+
+.step p { font-size: 0.85rem; color: var(--text2); line-height: 1.65; }
+
+.step-connector {
+  position: absolute; top: 50%; right: -1.5rem;
+  width: 1.5rem; height: 2px;
+  background: linear-gradient(90deg, var(--accent2), transparent);
+}
+
+.step:last-child .step-connector { display: none; }
+
+
+/* ─── AI BOT TRADING ─── */
+.bot-section { max-width: 1200px; margin: 0 auto; }
+
+.bot-header { text-align: center; margin-bottom: 4rem; }
+.bot-header .section-desc { margin: 0.8rem auto 0; }
+
+.bot-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 2rem; align-items: start;
+}
+
+/* Terminal card */
+.bot-terminal {
+  background: #0a0a12;
+  border: 1px solid rgba(0,240,255,0.2);
+  border-radius: 20px; overflow: hidden;
+  box-shadow: 0 0 60px rgba(0,240,255,0.06);
+}
+
+.terminal-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.85rem 1.2rem;
+  background: rgba(0,240,255,0.05);
+  border-bottom: 1px solid rgba(0,240,255,0.1);
+}
+
+.terminal-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+
+.terminal-title {
+  font-size: 0.72rem; color: var(--text3);
+  letter-spacing: 1px; text-transform: uppercase;
+  margin-left: auto; font-family: monospace;
+}
+
+.terminal-body { padding: 1.4rem; font-family: monospace; font-size: 0.78rem; }
+
+.t-line { display: flex; gap: 0.7rem; margin-bottom: 0.55rem; align-items: flex-start; }
+.t-time { color: var(--text3); flex-shrink: 0; }
+.t-tag {
+  padding: 0.1rem 0.45rem; border-radius: 4px;
+  font-size: 0.65rem; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+}
+.t-tag.buy  { background: rgba(0,230,118,0.15); color: var(--green); }
+.t-tag.sell { background: rgba(255,107,107,0.15); color: var(--accent3); }
+.t-tag.info { background: rgba(0,240,255,0.12); color: var(--accent); }
+.t-tag.warn { background: rgba(255,184,0,0.12); color: #FFB800; }
+.t-msg { color: var(--text2); line-height: 1.5; }
+.t-val { margin-left: auto; flex-shrink: 0; }
+.t-val.green { color: var(--green); }
+.t-val.red   { color: var(--accent3); }
+
+.terminal-divider {
+  height: 1px; background: var(--border); margin: 0.8rem 0;
+}
+
+.terminal-status {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.9rem 1.4rem;
+  background: rgba(0,230,118,0.04);
+  border-top: 1px solid rgba(0,230,118,0.1);
+}
+
+.bot-status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); animation: pulse 2s infinite;
+}
+
+.bot-status-label { font-size: 0.72rem; color: var(--green); font-family: monospace; }
+
+.terminal-pnl {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.05rem; font-weight: 700; color: var(--green);
+}
+
+/* Right side: feature pills */
+.bot-features { display: flex; flex-direction: column; gap: 1rem; }
+
+.bot-feature {
+  display: flex; gap: 1.2rem; align-items: flex-start;
+  padding: 1.4rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border); border-radius: 16px;
+  transition: all 0.3s;
+}
+
+.bot-feature:hover {
+  border-color: rgba(0,240,255,0.2);
+  transform: translateX(6px);
+  box-shadow: -4px 0 24px rgba(0,240,255,0.07);
+}
+
+.bot-feat-icon {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
+
+.bfi-cyan   { background: rgba(0,240,255,0.1); }
+.bfi-purple { background: rgba(123,97,255,0.1); }
+.bfi-green  { background: rgba(0,230,118,0.1); }
+.bfi-red    { background: rgba(255,107,107,0.1); }
+
+.bot-feat-text h4 {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.95rem; font-weight: 700; margin-bottom: 0.3rem;
+}
+.bot-feat-text p { font-size: 0.82rem; color: var(--text2); line-height: 1.55; }
+
+/* Strategy chips */
+.bot-strategies {
+  margin-top: 2.5rem;
+  display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center;
+}
+
+.strategy-chip {
+  padding: 0.4rem 1rem; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--glass);
+  font-size: 0.75rem; color: var(--text2);
+  transition: all 0.3s; cursor: default;
+}
+
+.strategy-chip:hover {
+  border-color: var(--accent); color: var(--accent);
+  background: rgba(0,240,255,0.05);
+}
+
+/* ─── PRICING ─── */
+.pricing { max-width: 1000px; margin: 0 auto; }
+
+.pricing-header { text-align: center; margin-bottom: 4rem; }
+.pricing-header .section-desc { margin: 0.8rem auto 0; }
+
+.pricing-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1.2rem; align-items: start;
+  perspective: 1000px;
+}
+
+.price-card {
+  padding: 2.2rem; border-radius: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.price-card:hover {
+  transform: translateY(-10px) rotateY(-2deg);
+  box-shadow: 0 30px 60px rgba(0,0,0,0.4);
+}
+
+.price-card.featured {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(0,240,255,0.05), var(--card-bg));
+}
+
+.price-card.featured::before {
+  content: 'Most Popular';
+  position: absolute; top: -12px; left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 1rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: var(--bg); font-size: 0.7rem;
+  font-weight: 700; border-radius: 100px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+.price-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.15rem; font-weight: 700; margin-bottom: 0.3rem;
+}
+
+.price-desc { font-size: 0.82rem; color: var(--text3); margin-bottom: 1.5rem; }
+
+.price-amount {
+  font-family: 'Syne', sans-serif;
+  font-size: 2.8rem; font-weight: 800; margin-bottom: 0.2rem;
+}
+
+.price-amount span { font-size: 1rem; font-weight: 400; color: var(--text3); }
+.price-period { font-size: 0.78rem; color: var(--text3); margin-bottom: 1.5rem; }
+
+.price-features { list-style: none; margin-bottom: 2rem; }
+
+.price-features li {
+  padding: 0.5rem 0; font-size: 0.85rem; color: var(--text2);
+  display: flex; align-items: center; gap: 0.6rem;
+}
+
+.price-features li::before {
+  content: '✓'; color: var(--green);
+  font-weight: 700; font-size: 0.8rem;
+}
+
+.price-btn {
+  width: 100%; padding: 0.75rem; border-radius: 12px;
+  font-size: 0.88rem; font-weight: 600;
+  font-family: 'DM Sans', sans-serif; cursor: none;
+  transition: all 0.3s;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text); position: relative; overflow: hidden;
+}
+
+.price-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.price-card.featured .price-btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none; color: var(--bg);
+}
+
+.price-card.featured .price-btn:hover {
+  box-shadow: 0 0 40px rgba(0,240,255,0.3);
+  transform: translateY(-2px);
+}
+
+/* ─── CTA ─── */
+.cta-section {
+  text-align: center; max-width: 700px;
+  margin: 0 auto; padding: 8rem 2rem;
+  position: relative;
+}
+
+.cta-section .section-title {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  margin-bottom: 1rem;
+}
+
+.cta-section .section-desc { margin: 0 auto 2.5rem; }
+
+/* ─── FOOTER ─── */
+footer {
+  padding: 3rem; border-top: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+.footer-copy { font-size: 0.82rem; color: var(--text3); }
+
+.footer-links { display: flex; gap: 2rem; }
+
+.footer-links a {
+  font-size: 0.82rem; color: var(--text3);
+  text-decoration: none; transition: color 0.3s; cursor: none;
+}
+
+.footer-links a:hover { color: var(--text); }
+
+/* ─── REVEAL ANIMATIONS ─── */
+.reveal {
+  opacity: 0; transform: translateY(50px);
+  transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+.reveal-left {
+  opacity: 0; transform: translateX(-60px);
+  transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-left.visible { opacity: 1; transform: translateX(0); }
+
+.reveal-right {
+  opacity: 0; transform: translateX(60px);
+  transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-right.visible { opacity: 1; transform: translateX(0); }
+
+.reveal-scale {
+  opacity: 0; transform: scale(0.85);
+  transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-scale.visible { opacity: 1; transform: scale(1); }
+
+/* Staggered children */
+.stagger-children > * {
+  opacity: 0; transform: translateY(30px);
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.stagger-children.visible > *:nth-child(1) { transition-delay: 0.05s; opacity: 1; transform: translateY(0); }
+.stagger-children.visible > *:nth-child(2) { transition-delay: 0.12s; opacity: 1; transform: translateY(0); }
+.stagger-children.visible > *:nth-child(3) { transition-delay: 0.19s; opacity: 1; transform: translateY(0); }
+.stagger-children.visible > *:nth-child(4) { transition-delay: 0.26s; opacity: 1; transform: translateY(0); }
+.stagger-children.visible > *:nth-child(5) { transition-delay: 0.33s; opacity: 1; transform: translateY(0); }
+.stagger-children.visible > *:nth-child(6) { transition-delay: 0.40s; opacity: 1; transform: translateY(0); }
+
+/* ─── FLOATING PARTICLES ─── */
+.particle {
+  position: fixed;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none; z-index: 1;
+  opacity: 0; animation: float 8s infinite;
+}
+
+@keyframes float {
+  0% { opacity: 0; transform: translateY(100vh) scale(0); }
+  10% { opacity: 0.5; }
+  90% { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-100px) scale(1); }
+}
+
+/* ─── MAGNETIC ELEMENTS ─── */
+.magnetic { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 900px) {
+  body { cursor: default; }
+  .cursor, .cursor-dot { display: none; }
+  nav { padding: 1rem 1.5rem; }
+  .nav-links { display: none; }
+  section { padding: 4rem 1.5rem; }
+  .problem { grid-template-columns: 1fr; gap: 2rem; }
+  .problem-visual { gap: 0.75rem; }
+  .features-grid { grid-template-columns: 1fr; }
+  .steps { flex-direction: column; }
+  .step-connector { display: none !important; }
+  .bot-grid { grid-template-columns: 1fr; }
+  .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
+  .hero-stats { flex-direction: column; gap: 1.5rem; }
+  footer { flex-direction: column; gap: 1rem; text-align: center; }
+  .stat-showcase { gap: 2rem !important; }
+  .big-text { font-size: clamp(2rem, 6vw, 4rem) !important; }
+  * { cursor: default !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="cursor"></div>
+<div class="cursor-dot"></div>
+<div class="progress-bar"></div>
+<canvas id="three-canvas"></canvas>
+<div class="noise"></div>
+<div class="grid-bg"></div>
+
+<!-- Particles -->
+<div class="particle" style="left:8%;animation-delay:0s;animation-duration:7s;"></div>
+<div class="particle" style="left:18%;animation-delay:1.2s;animation-duration:9s;background:var(--accent2);"></div>
+<div class="particle" style="left:32%;animation-delay:2.8s;animation-duration:6.5s;"></div>
+<div class="particle" style="left:48%;animation-delay:0.5s;animation-duration:8.5s;background:var(--accent2);"></div>
+<div class="particle" style="left:62%;animation-delay:3.5s;animation-duration:7.2s;"></div>
+<div class="particle" style="left:75%;animation-delay:1.8s;animation-duration:10s;background:var(--accent3);"></div>
+<div class="particle" style="left:88%;animation-delay:4.2s;animation-duration:6.8s;"></div>
+<div class="particle" style="left:95%;animation-delay:0.8s;animation-duration:9.5s;background:var(--accent2);"></div>
+
+<div class="content">
+
+  <!-- NAV -->
+  <nav id="nav">
+    <div class="logo magnetic">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Antenna -->
+          <line x1="12" y1="1" x2="12" y2="4" stroke="#06060B" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="12" cy="1" r="1" fill="#06060B"/>
+          <!-- Robot head -->
+          <rect x="4" y="4" width="16" height="11" rx="3" fill="#06060B" fill-opacity="0.85"/>
+          <!-- Eyes (screen-like) -->
+          <rect x="6.5" y="7" width="4" height="3" rx="1" fill="#00F0FF" fill-opacity="0.9"/>
+          <rect x="13.5" y="7" width="4" height="3" rx="1" fill="#00F0FF" fill-opacity="0.9"/>
+          <!-- Mouth / chart line -->
+          <polyline points="7,13 9,11.5 11,12.5 13,11 15,12 17,10.5" stroke="#00F0FF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Neck -->
+          <rect x="10" y="15" width="4" height="2" rx="1" fill="#06060B" fill-opacity="0.7"/>
+          <!-- Body -->
+          <rect x="6" y="17" width="12" height="6" rx="2.5" fill="#06060B" fill-opacity="0.7"/>
+          <!-- Body chart bars -->
+          <rect x="8" y="20" width="2" height="2" rx="0.5" fill="#7B61FF" fill-opacity="0.9"/>
+          <rect x="11" y="19" width="2" height="3" rx="0.5" fill="#7B61FF" fill-opacity="0.9"/>
+          <rect x="14" y="18" width="2" height="4" rx="0.5" fill="#00F0FF" fill-opacity="0.9"/>
+        </svg>
+      </div>
+      AlphaPilot
+    </div>
+    <ul class="nav-links">
+      <li><a href="#problem" class="magnetic">Problem</a></li>
+      <li><a href="#features" class="magnetic">Features</a></li>
+      <li><a href="#how" class="magnetic">How it Works</a></li>
+      <li><a href="#bot" class="magnetic">AI Bot</a></li>
+      <li><a href="#pricing" class="magnetic">Pricing</a></li>
+    </ul>
+    <button class="nav-cta magnetic">Join Waitlist</button>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <div class="glow-orb glow-1" data-parallax="0.04"></div>
+    <div class="glow-orb glow-2" data-parallax="-0.03"></div>
+    <div class="glow-orb glow-3" data-parallax="0.05"></div>
+
+    <div class="hero-badge" data-parallax="-0.01">
+      <span class="badge-dot"></span>
+      Now in Private Beta
+    </div>
+
+    <h1 id="hero-title" data-parallax="-0.02">
+      Stop Trading<br>On <span class="gradient-text">Emotions</span>
+    </h1>
+
+    <p class="hero-sub" data-parallax="-0.015">
+      AlphaPilot is your personal trading copilot that detects behavioral patterns, prevents emotional trades, and transforms you from a losing trader into a disciplined one.
+    </p>
+
+    <div class="hero-actions" data-parallax="-0.01">
+      <button class="btn-primary magnetic">Get Early Access</button>
+      <button class="btn-secondary magnetic">Watch Demo ▶</button>
+    </div>
+
+    <div class="hero-stats" data-parallax="-0.005">
+      <div class="stat-item">
+        <div class="stat-num" data-count="90">0%</div>
+        <div class="stat-label">F&O Traders Lose Money</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" data-count="67">0%</div>
+        <div class="stat-label">Losses from Emotions</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num" data-count="3">0×</div>
+        <div class="stat-label">Avg Improvement</div>
+      </div>
+    </div>
+
+    <div class="scroll-indicator">
+      <div class="scroll-mouse"><div class="scroll-dot"></div></div>
+      <div class="scroll-text">Scroll to explore</div>
+    </div>
+  </section>
+
+  <!-- MARQUEE -->
+  <div class="marquee-section">
+    <div class="marquee-track">
+      <div class="marquee-item"><span class="marquee-dot"></span>Behavioral AI</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Revenge Trade Detection</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Zerodha Integration</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Pre-Trade Risk Nudge</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>AI Trading Coach</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Portfolio Analytics</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Emotional Pattern Mapping</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Weekly Improvement Plans</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Behavioral AI</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Revenge Trade Detection</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Zerodha Integration</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Pre-Trade Risk Nudge</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>AI Trading Coach</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Portfolio Analytics</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Emotional Pattern Mapping</div>
+      <div class="marquee-item"><span class="marquee-dot"></span>Weekly Improvement Plans</div>
+    </div>
+  </div>
+
+  <!-- PROBLEM -->
+  <section id="problem">
+    <div class="problem">
+      <div class="reveal-left">
+        <div class="section-label">The Problem</div>
+        <h2 class="section-title">Your Brain is Your<br>Worst Trading Enemy</h2>
+        <p class="section-desc">
+          SEBI data confirms it — the vast majority of retail F&O traders lose money. Not because they lack knowledge, but because emotions hijack their decisions at the worst possible moments.
+        </p>
+        <div class="problem-stats stagger-children">
+          <div class="problem-stat" data-tilt>
+            <div class="big">89%</div>
+            <div class="label">Trade on impulse after a loss</div>
+          </div>
+          <div class="problem-stat" data-tilt>
+            <div class="big">₹1.8L</div>
+            <div class="label">Avg annual loss per retail trader</div>
+          </div>
+          <div class="problem-stat" data-tilt>
+            <div class="big">73%</div>
+            <div class="label">Don't use stop losses</div>
+          </div>
+          <div class="problem-stat" data-tilt>
+            <div class="big">5min</div>
+            <div class="label">Avg hold time on revenge trades</div>
+          </div>
+        </div>
+      </div>
+      <div class="problem-visual reveal-right">
+
+        <!-- WITH ALPHAPILOT: 2 gains, 1 small loss -->
+        <div class="loss-chart win-chart" data-tilt data-tilt-max="5">
+          <div class="chart-header">
+            <div class="chart-title">With AlphaPilot</div>
+            <div class="chart-badge green">✦ Protected</div>
+          </div>
+          <div class="chart-bars">
+            <div class="chart-bar" style="height:62%;background:var(--green);--delay:0.1s"><span class="tooltip">+₹3,200</span></div>
+            <div class="chart-bar" style="height:18%;background:var(--accent3);--delay:0.2s"><span class="tooltip">-₹700</span></div>
+            <div class="chart-bar" style="height:75%;background:var(--green);--delay:0.3s"><span class="tooltip">+₹4,100</span></div>
+          </div>
+        </div>
+
+        <!-- WITHOUT ALPHAPILOT: 2 small wins, 2 big losses -->
+        <div class="loss-chart" data-tilt data-tilt-max="5">
+          <div class="chart-header">
+            <div class="chart-title">Without AlphaPilot</div>
+            <div class="chart-badge">✖ Unprotected</div>
+          </div>
+          <div class="chart-bars">
+            <div class="chart-bar" style="height:32%;background:var(--green);--delay:0.1s"><span class="tooltip">+₹1,400</span></div>
+            <div class="chart-bar" style="height:28%;background:var(--green);--delay:0.2s"><span class="tooltip">+₹1,100</span></div>
+            <div class="chart-bar" style="height:72%;background:var(--accent3);--delay:0.3s"><span class="tooltip">-₹4,800 REVENGE</span></div>
+            <div class="chart-bar" style="height:92%;background:var(--accent3);--delay:0.4s"><span class="tooltip">-₹7,300 TILT</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- BIG TEXT PARALLAX SECTION -->
+  <section class="big-text-section">
+    <div class="big-text big-text-1" data-scroll-speed="-2">DISCIPLINE WINS · DISCIPLINE WINS · DISCIPLINE WINS ·</div>
+    <div class="big-text big-text-2" data-scroll-speed="3">EMOTIONS LOSE · EMOTIONS LOSE · EMOTIONS LOSE ·</div>
+    <div class="big-text big-text-3" data-scroll-speed="-1.5">DATA DRIVEN · DATA DRIVEN · DATA DRIVEN ·</div>
+
+    <div class="big-text-content reveal-scale">
+      <div class="section-label">By the Numbers</div>
+      <h2 class="section-title" style="margin-bottom:3rem;">What AlphaPilot<br>Traders Achieve</h2>
+      <div class="stat-showcase stagger-children">
+        <div class="stat-big">
+          <div class="stat-big-num cyan" data-count-up="42">0%</div>
+          <div class="stat-big-label">Fewer Revenge Trades</div>
+        </div>
+        <div class="stat-big">
+          <div class="stat-big-num purple" data-count-up="2.8">0×</div>
+          <div class="stat-big-label">Better Win/Loss Ratio</div>
+        </div>
+        <div class="stat-big">
+          <div class="stat-big-num green" data-count-up="67">0%</div>
+          <div class="stat-big-label">Use Stop Losses Now</div>
+        </div>
+        <div class="stat-big">
+          <div class="stat-big-num red">₹<span data-count-up="1.2">0</span>L</div>
+          <div class="stat-big-label">Avg Saved Per Quarter</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="features-wrapper">
+    <div class="features-sticky">
+      <div class="features-header reveal">
+        <div class="section-label">Features</div>
+        <h2 class="section-title">AI That Knows Your<br>Trading Psychology</h2>
+        <p class="section-desc">Not another signal app. AlphaPilot watches your behavior, not just the market.</p>
+      </div>
+      <div class="features-grid stagger-children">
+        <div class="feature-card" data-tilt data-tilt-max="6">
+          <div class="feature-icon fi-cyan">🔗</div>
+          <h3>Auto Trade Journal</h3>
+          <p>Connects to Zerodha, Groww, Upstox via read-only API. Every trade auto-logged with entry, exit, P&L, hold time — zero manual effort.</p>
+        </div>
+        <div class="feature-card" data-tilt data-tilt-max="6">
+          <div class="feature-icon fi-purple">🧠</div>
+          <h3>Behavioral AI Engine</h3>
+          <p>Detects revenge trading, FOMO entries, overtrading, and position-sizing violations before they drain your capital. Learns your unique patterns.</p>
+        </div>
+        <div class="feature-card" data-tilt data-tilt-max="6">
+          <div class="feature-icon fi-red">🚨</div>
+          <h3>Pre-Trade Risk Nudge</h3>
+          <p>"You've lost ₹12K today. Your win rate drops to 23% after 3+ losses." Real-time intervention before the worst trade of your day.</p>
+        </div>
+        <div class="feature-card" data-tilt data-tilt-max="6">
+          <div class="feature-icon fi-green">📊</div>
+          <h3>Personal Analytics</h3>
+          <p>Win rate by hour, day, instrument. Avg winner vs loser ratio. Drawdown curves. Your trading DNA — visualized and actionable.</p>
+        </div>
+        <div class="feature-card" data-tilt data-tilt-max="6">
+          <div class="feature-icon fi-cyan">💬</div>
+          <h3>AI Trading Coach</h3>
+          <p>"What's my worst habit?" — answered from your own data. Natural language queries about your trading history and improvement areas.</p>
+        </div>
+        <div class="feature-card" data-tilt data-tilt-max="6">
+          <div class="feature-icon fi-purple">📈</div>
+          <h3>Weekly Improvement Plan</h3>
+          <p>Personalized weekly report with your 3 biggest profit leaks and concrete, data-backed steps to fix each one.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="how-it-works">
+      <div class="how-header reveal">
+        <div class="section-label">How It Works</div>
+        <h2 class="section-title">Three Steps to<br>Trading Discipline</h2>
+        <p class="section-desc">Set up in 2 minutes. See results in your first week.</p>
+      </div>
+      <div class="steps stagger-children">
+        <div class="step" data-tilt data-tilt-max="5">
+          <div class="step-num">01</div>
+          <h3>Connect Your Broker</h3>
+          <p>Link your Zerodha, Groww, or Upstox account with read-only access. We never place trades — only observe and learn.</p>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step" data-tilt data-tilt-max="5">
+          <div class="step-num">02</div>
+          <h3>Trade Normally</h3>
+          <p>Keep doing what you do. AlphaPilot silently analyzes every trade, mapping your emotional patterns, timing habits, and risk behavior.</p>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step" data-tilt data-tilt-max="5">
+          <div class="step-num">03</div>
+          <h3>Get Smarter Daily</h3>
+          <p>Receive real-time nudges, weekly reports, and AI coaching. Watch your revenge trades drop and your P&L transform.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- AI BOT TRADING -->
+  <section id="bot">
+    <div class="bot-section">
+      <div class="bot-header reveal">
+        <div class="section-label">Automate</div>
+        <h2 class="section-title">Your AI Bot Trades<br>While You Sleep</h2>
+        <p class="section-desc">Strategy-backed, emotionless execution. AlphaPilot's trading bot runs your strategies 24/7 — zero FOMO, zero revenge, zero hesitation.</p>
+      </div>
+
+      <div class="bot-grid">
+
+        <!-- Live bot terminal -->
+        <div class="bot-terminal reveal-left" data-tilt data-tilt-max="4">
+          <div class="terminal-bar">
+            <div class="terminal-dot" style="background:#FF5F57"></div>
+            <div class="terminal-dot" style="background:#FEBC2E"></div>
+            <div class="terminal-dot" style="background:#28C840"></div>
+            <div class="terminal-title">alphapilot_bot · live</div>
+          </div>
+          <div class="terminal-body">
+            <div class="t-line">
+              <span class="t-time">09:15:02</span>
+              <span class="t-tag info">SCAN</span>
+              <span class="t-msg">EMA crossover signal detected — NIFTY 50</span>
+            </div>
+            <div class="t-line">
+              <span class="t-time">09:15:04</span>
+              <span class="t-tag info">RISK</span>
+              <span class="t-msg">Position size calc: 2% of capital → 3 lots</span>
+            </div>
+            <div class="t-line">
+              <span class="t-time">09:15:05</span>
+              <span class="t-tag buy">BUY</span>
+              <span class="t-msg">NIFTY25APRFUT · 3 lots @ ₹22,480</span>
+              <span class="t-val green">+₹0</span>
+            </div>
+            <div class="terminal-divider"></div>
+            <div class="t-line">
+              <span class="t-time">10:42:18</span>
+              <span class="t-tag warn">SL</span>
+              <span class="t-msg">Stop-loss trail updated → ₹22,310</span>
+            </div>
+            <div class="t-line">
+              <span class="t-time">11:58:33</span>
+              <span class="t-tag sell">SELL</span>
+              <span class="t-msg">Target hit · NIFTY25APRFUT @ ₹22,740</span>
+              <span class="t-val green">+₹7,800</span>
+            </div>
+            <div class="terminal-divider"></div>
+            <div class="t-line">
+              <span class="t-time">13:05:11</span>
+              <span class="t-tag info">SCAN</span>
+              <span class="t-msg">RSI oversold signal — BANKNIFTY</span>
+            </div>
+            <div class="t-line">
+              <span class="t-time">13:05:13</span>
+              <span class="t-tag buy">BUY</span>
+              <span class="t-msg">BANKNIFTY25APRFUT · 1 lot @ ₹48,220</span>
+              <span class="t-val green">+₹0</span>
+            </div>
+            <div class="t-line">
+              <span class="t-time">14:31:47</span>
+              <span class="t-tag sell">SELL</span>
+              <span class="t-msg">SL triggered · BANKNIFTY @ ₹47,960</span>
+              <span class="t-val red">-₹1,300</span>
+            </div>
+          </div>
+          <div class="terminal-status">
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <div class="bot-status-dot"></div>
+              <span class="bot-status-label">BOT ACTIVE · 4 trades today</span>
+            </div>
+            <div class="terminal-pnl">+₹6,500</div>
+          </div>
+        </div>
+
+        <!-- Feature list -->
+        <div class="bot-features stagger-children reveal-right">
+          <div class="bot-feature">
+            <div class="bot-feat-icon bfi-cyan">🧠</div>
+            <div class="bot-feat-text">
+              <h4>Strategy Engine</h4>
+              <p>Run EMA crossovers, RSI mean-reversion, VWAP scalping, and custom multi-condition strategies. Backtested before going live.</p>
+            </div>
+          </div>
+          <div class="bot-feature">
+            <div class="bot-feat-icon bfi-green">🛡️</div>
+            <div class="bot-feat-text">
+              <h4>Built-in Risk Guard</h4>
+              <p>Daily loss limits, per-trade stop-losses, max drawdown kill-switch. The bot stops itself before a bad streak turns catastrophic.</p>
+            </div>
+          </div>
+          <div class="bot-feature">
+            <div class="bot-feat-icon bfi-purple">⚡</div>
+            <div class="bot-feat-text">
+              <h4>Zerodha Kite Execution</h4>
+              <p>Sub-second order placement via Kite Connect API. Market, limit, SL-M orders with automatic retry on rejection.</p>
+            </div>
+          </div>
+          <div class="bot-feature">
+            <div class="bot-feat-icon bfi-red">📡</div>
+            <div class="bot-feat-text">
+              <h4>Live P&L Dashboard</h4>
+              <p>Watch every bot trade in real-time. Full transparency — entry, exit, reason, slippage, and net P&L streamed live.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Strategy chips -->
+      <div class="bot-strategies reveal">
+        <div class="strategy-chip">EMA Crossover</div>
+        <div class="strategy-chip">RSI Mean Reversion</div>
+        <div class="strategy-chip">VWAP Scalping</div>
+        <div class="strategy-chip">Breakout Hunter</div>
+        <div class="strategy-chip">Momentum Swing</div>
+        <div class="strategy-chip">Opening Range Breakout</div>
+        <div class="strategy-chip">Custom Strategy</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section id="pricing">
+    <div class="pricing">
+      <div class="pricing-header reveal">
+        <div class="section-label">Pricing</div>
+        <h2 class="section-title">Invest in Your<br>Trading Discipline</h2>
+        <p class="section-desc">One bad revenge trade costs more than a year of AlphaPilot.</p>
+      </div>
+      <div class="pricing-grid stagger-children">
+        <div class="price-card" data-tilt data-tilt-max="4">
+          <div class="price-name">Free</div>
+          <div class="price-desc">Start tracking today</div>
+          <div class="price-amount">₹0</div>
+          <div class="price-period">Forever free</div>
+          <ul class="price-features">
+            <li>Manual trade journal</li>
+            <li>Basic win/loss stats</li>
+            <li>50 trades per month</li>
+            <li>Community access</li>
+          </ul>
+          <button class="price-btn magnetic">Get Started</button>
+        </div>
+        <div class="price-card featured" data-tilt data-tilt-max="4">
+          <div class="price-name">Pro</div>
+          <div class="price-desc">For serious traders</div>
+          <div class="price-amount">₹499<span>/mo</span></div>
+          <div class="price-period">Billed monthly</div>
+          <ul class="price-features">
+            <li>Auto-sync with broker</li>
+            <li>Behavioral AI alerts</li>
+            <li>Pre-trade risk nudges</li>
+            <li>AI trading coach</li>
+            <li>Weekly improvement plans</li>
+            <li>Unlimited trades</li>
+          </ul>
+          <button class="price-btn magnetic">Join Waitlist</button>
+        </div>
+        <div class="price-card" data-tilt data-tilt-max="4">
+          <div class="price-name">Premium</div>
+          <div class="price-desc">Multi-broker power user</div>
+          <div class="price-amount">₹999<span>/mo</span></div>
+          <div class="price-period">Billed monthly</div>
+          <ul class="price-features">
+            <li>Everything in Pro</li>
+            <li>Multi-broker support</li>
+            <li>Options strategy analyzer</li>
+            <li>Advanced analytics</li>
+            <li>API access</li>
+            <li>Priority support</li>
+          </ul>
+          <button class="price-btn magnetic">Contact Us</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section reveal-scale">
+    <div class="section-label">Ready?</div>
+    <h2 class="section-title">Stop Losing Money to<br><span class="gradient-text">Your Own Emotions</span></h2>
+    <p class="section-desc">Join 500+ traders in the private beta. Your future self will thank you.</p>
+    <div class="hero-actions" style="justify-content:center">
+      <button class="btn-primary magnetic">Get Early Access — Free</button>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-copy">© 2026 AlphaPilot. Built in India.</div>
+    <div class="footer-links">
+      <a href="#" class="magnetic">Privacy</a>
+      <a href="#" class="magnetic">Terms</a>
+      <a href="#" class="magnetic">Twitter</a>
+      <a href="#" class="magnetic">Discord</a>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// 1. CUSTOM CURSOR
+// ═══════════════════════════════════════
+const cursor = document.querySelector('.cursor');
+const cursorDot = document.querySelector('.cursor-dot');
+let cursorX = 0, cursorY = 0, dotX = 0, dotY = 0;
+
+document.addEventListener('mousemove', e => {
+  cursorX = e.clientX;
+  cursorY = e.clientY;
+});
+
+function animateCursor() {
+  dotX += (cursorX - dotX) * 0.15;
+  dotY += (cursorY - dotY) * 0.15;
+  cursor.style.left = dotX + 'px';
+  cursor.style.top = dotY + 'px';
+  cursorDot.style.left = cursorX + 'px';
+  cursorDot.style.top = cursorY + 'px';
+  requestAnimationFrame(animateCursor);
+}
+animateCursor();
+
+document.querySelectorAll('a, button, [data-tilt], .nav-cta, .testimonial-card').forEach(el => {
+  el.addEventListener('mouseenter', () => cursor.classList.add('hovering'));
+  el.addEventListener('mouseleave', () => cursor.classList.remove('hovering'));
+});
+
+// ═══════════════════════════════════════
+// 2. SCROLL STATE (lerp-based, unified)
+// ═══════════════════════════════════════
+const progressBar = document.querySelector('.progress-bar');
+const nav = document.getElementById('nav');
+let rawScrollY = window.scrollY;
+let smoothScrollY = rawScrollY;
+let lastScrollY = rawScrollY;
+
+window.addEventListener('scroll', () => { rawScrollY = window.scrollY; }, { passive: true });
+
+// ═══════════════════════════════════════
+// 3. NAV HIDE/SHOW (driven by RAF loop below)
+// ═══════════════════════════════════════
+
+// ═══════════════════════════════════════
+// 4. HERO TEXT SPLIT ANIMATION
+// ═══════════════════════════════════════
+function splitText() {
+  const title = document.getElementById('hero-title');
+  title.style.opacity = '1';
+
+  let charIndex = 0;
+
+  function processNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === ' ' || ch === '\n') {
+          frag.appendChild(document.createTextNode(ch));
+        } else {
+          const span = document.createElement('span');
+          span.className = 'char';
+          span.style.animationDelay = (charIndex * 0.03 + 0.5) + 's';
+          span.textContent = ch;
+          frag.appendChild(span);
+          charIndex++;
+        }
+      }
+      node.parentNode.replaceChild(frag, node);
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      // Process children in reverse so replacements don't shift indices
+      const children = Array.from(node.childNodes);
+      children.forEach(child => processNode(child));
+    }
+  }
+
+  processNode(title);
+}
+splitText();
+
+// Animate other hero elements
+setTimeout(() => {
+  document.querySelector('.hero-badge').style.cssText = 'opacity:1;transform:translateY(0);transition:all 0.8s ease-out';
+}, 300);
+setTimeout(() => {
+  document.querySelector('.hero-sub').style.cssText = 'opacity:1;transform:translateY(0);transition:all 0.8s ease-out';
+}, 900);
+setTimeout(() => {
+  document.querySelector('.hero-actions').style.cssText = 'opacity:1;transform:translateY(0);transition:all 0.8s ease-out';
+}, 1100);
+setTimeout(() => {
+  document.querySelector('.hero-stats').style.cssText = 'opacity:1;transform:translateY(0);transition:all 0.8s ease-out';
+}, 1300);
+setTimeout(() => {
+  document.querySelector('.scroll-indicator').style.cssText = 'opacity:1;transition:opacity 0.8s ease-out';
+}, 1600);
+
+// ═══════════════════════════════════════
+// 5. UNIFIED RAF SCROLL LOOP (lerp-smoothed)
+// ═══════════════════════════════════════
+const parallaxElements = document.querySelectorAll('[data-parallax]');
+const scrollSpeedElements = document.querySelectorAll('[data-scroll-speed]');
+const maxScroll = () => document.documentElement.scrollHeight - window.innerHeight;
+
+function scrollTick() {
+  // Lerp toward raw scroll — 0.09 gives a nice snappy-but-smooth feel
+  smoothScrollY += (rawScrollY - smoothScrollY) * 0.09;
+
+  // Progress bar
+  const pct = (smoothScrollY / maxScroll()) * 100;
+  progressBar.style.width = pct + '%';
+
+  // Nav hide / show
+  if (rawScrollY > lastScrollY + 4 && rawScrollY > 100) {
+    nav.classList.add('hidden');
+  } else if (rawScrollY < lastScrollY - 4) {
+    nav.classList.remove('hidden');
+  }
+  lastScrollY = rawScrollY;
+
+  // Parallax
+  parallaxElements.forEach(el => {
+    const speed = parseFloat(el.dataset.parallax);
+    el.style.transform = `translateY(${smoothScrollY * speed}px)`;
+  });
+
+  scrollSpeedElements.forEach(el => {
+    const speed = parseFloat(el.dataset.scrollSpeed);
+    el.style.transform = `translateX(${smoothScrollY * speed * 0.1}px)`;
+  });
+
+  requestAnimationFrame(scrollTick);
+}
+requestAnimationFrame(scrollTick);
+
+// ═══════════════════════════════════════
+// 6. TILT EFFECT ON CARDS
+// ═══════════════════════════════════════
+document.querySelectorAll('[data-tilt]').forEach(el => {
+  const maxTilt = parseFloat(el.dataset.tiltMax) || 10;
+
+  el.addEventListener('mousemove', e => {
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const tiltX = (0.5 - y) * maxTilt;
+    const tiltY = (x - 0.5) * maxTilt;
+
+    el.style.transform = `perspective(800px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateY(-5px) scale(1.02)`;
+
+    // Spotlight effect
+    el.style.setProperty('--mouse-x', (x * 100) + '%');
+    el.style.setProperty('--mouse-y', (y * 100) + '%');
+  });
+
+  el.addEventListener('mouseleave', () => {
+    el.style.transform = 'perspective(800px) rotateX(0) rotateY(0) translateY(0) scale(1)';
+  });
+});
+
+// ═══════════════════════════════════════
+// 7. MAGNETIC EFFECT
+// ═══════════════════════════════════════
+document.querySelectorAll('.magnetic').forEach(el => {
+  el.addEventListener('mousemove', e => {
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    el.style.transform = `translate(${x * 0.15}px, ${y * 0.15}px)`;
+  });
+
+  el.addEventListener('mouseleave', () => {
+    el.style.transform = 'translate(0, 0)';
+  });
+});
+
+// ═══════════════════════════════════════
+// 8. INTERSECTION OBSERVER (REVEALS)
+// ═══════════════════════════════════════
+const revealObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-scale, .stagger-children').forEach(el => {
+  revealObserver.observe(el);
+});
+
+// ═══════════════════════════════════════
+// 9. COUNTER ANIMATIONS (smooth)
+// ═══════════════════════════════════════
+function animateCounter(el, target, suffix, isFloat, duration) {
+  duration = duration || 2500;
+  const startTime = performance.now();
+  const decimalPlaces = isFloat ? 1 : 0;
+
+  function easeOutExpo(t) {
+    return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+  }
+
+  function update(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = easeOutExpo(progress);
+    const current = eased * target;
+
+    el.textContent = current.toFixed(decimalPlaces) + suffix;
+
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
+}
+
+// Hero stats
+const heroStatsObserver = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting) {
+    document.querySelectorAll('.stat-num').forEach((el, i) => {
+      const target = parseInt(el.dataset.count);
+      const suffix = el.textContent.replace(/[0-9]/g, '');
+      setTimeout(() => animateCounter(el, target, suffix, false, 2500), i * 150);
+    });
+    heroStatsObserver.disconnect();
+  }
+}, { threshold: 0.5 });
+
+heroStatsObserver.observe(document.querySelector('.hero-stats'));
+
+// Big stats
+const bigStatsObserver = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting) {
+    document.querySelectorAll('[data-count-up]').forEach((el, i) => {
+      const target = parseFloat(el.dataset.countUp);
+      const text = el.textContent;
+      const suffix = text.replace(/[0-9.]/g, '');
+      const isFloat = target % 1 !== 0;
+      setTimeout(() => animateCounter(el, target, suffix, isFloat, 2800), i * 200);
+    });
+    bigStatsObserver.disconnect();
+  }
+}, { threshold: 0.3 });
+
+const statShowcase = document.querySelector('.stat-showcase');
+if (statShowcase) bigStatsObserver.observe(statShowcase);
+
+// ═══════════════════════════════════════
+// 10. THREE.JS 3D SCENE
+// ═══════════════════════════════════════
+(function() {
+  const canvas = document.getElementById('three-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 5;
+
+  // Lights
+  const ambientLight = new THREE.AmbientLight(0x222233, 0.5);
+  scene.add(ambientLight);
+
+  const pointLight1 = new THREE.PointLight(0x00F0FF, 2.5, 25);
+  pointLight1.position.set(3, 3, 3);
+  scene.add(pointLight1);
+
+  const pointLight2 = new THREE.PointLight(0x7B61FF, 2, 25);
+  pointLight2.position.set(-3, -2, 2);
+  scene.add(pointLight2);
+
+  const pointLight3 = new THREE.PointLight(0xFF6B6B, 1.2, 18);
+  pointLight3.position.set(0, -3, 4);
+  scene.add(pointLight3);
+
+  // Materials
+  const wireMat = new THREE.MeshPhongMaterial({ color: 0x00F0FF, wireframe: true, transparent: true, opacity: 0.12, shininess: 100 });
+  const glassMat = new THREE.MeshPhongMaterial({ color: 0x7B61FF, transparent: true, opacity: 0.08, shininess: 200, specular: 0x7B61FF });
+  const edgeMat = new THREE.MeshPhongMaterial({ color: 0x00F0FF, transparent: true, opacity: 0.06, shininess: 150, specular: 0x00F0FF });
+
+  // Main Icosahedron
+  const ico = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2, 1), wireMat);
+  ico.position.set(2.8, 0.5, -2);
+  scene.add(ico);
+
+  // Inner Icosahedron (nested)
+  const icoInner = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.2, 0),
+    new THREE.MeshPhongMaterial({ color: 0x7B61FF, wireframe: true, transparent: true, opacity: 0.08 })
+  );
+  icoInner.position.copy(ico.position);
+  scene.add(icoInner);
+
+  // Torus
+  const torus = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.35, 16, 60), glassMat);
+  torus.position.set(-3.5, -5, -3);
+  scene.add(torus);
+
+  // Torus Knot
+  const torusKnot = new THREE.Mesh(
+    new THREE.TorusKnotGeometry(0.8, 0.25, 80, 12),
+    new THREE.MeshPhongMaterial({ color: 0xFF6B6B, wireframe: true, transparent: true, opacity: 0.07 })
+  );
+  torusKnot.position.set(4, -10, -2);
+  scene.add(torusKnot);
+
+  // Octahedron
+  const octa = new THREE.Mesh(new THREE.OctahedronGeometry(1.3, 0), edgeMat);
+  octa.position.set(3.5, -16, -2);
+  scene.add(octa);
+
+  // Dodecahedron
+  const dodeca = new THREE.Mesh(new THREE.DodecahedronGeometry(1.1, 0), wireMat.clone());
+  dodeca.material.opacity = 0.08;
+  dodeca.position.set(-3, -22, -2);
+  scene.add(dodeca);
+
+  // Rings
+  const ringMat = new THREE.MeshPhongMaterial({ color: 0x00F0FF, transparent: true, opacity: 0.12 });
+  const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.04, 8, 50), ringMat);
+  ring1.position.set(4.5, -7, -1);
+  scene.add(ring1);
+
+  const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.04, 8, 50), ringMat.clone());
+  ring2.material.color.set(0x7B61FF);
+  ring2.position.set(-4, -14, -1.5);
+  scene.add(ring2);
+
+  // Floating spheres
+  const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
+  const spheres = [];
+  for (let i = 0; i < 20; i++) {
+    const mat = new THREE.MeshPhongMaterial({
+      color: [0x00F0FF, 0x7B61FF, 0xFF6B6B, 0x00E676][i % 4],
+      transparent: true, opacity: 0.35, shininess: 200
+    });
+    const sphere = new THREE.Mesh(sphereGeo, mat);
+    sphere.position.set(
+      (Math.random() - 0.5) * 12,
+      (Math.random() - 0.5) * 30,
+      (Math.random() - 0.5) * 5 - 2
+    );
+    sphere.userData = {
+      speed: 0.2 + Math.random() * 0.6,
+      amplitude: 0.3 + Math.random() * 1,
+      phase: Math.random() * Math.PI * 2,
+      baseY: sphere.position.y,
+      baseX: sphere.position.x
+    };
+    scene.add(sphere);
+    spheres.push(sphere);
+  }
+
+  // Mouse tracking
+  let mouseX = 0, mouseY = 0;
+  document.addEventListener('mousemove', e => {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  // Resize
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Animate
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = Date.now() * 0.001;
+
+    // Reuse the globally lerped smoothScrollY for consistency
+    const scrollFactor = smoothScrollY * 0.001;
+
+    // Smooth camera follow
+    camera.position.x += (mouseX * 0.4 - camera.position.x) * 0.025;
+    camera.position.y += (-mouseY * 0.4 + scrollFactor * 0.8 - camera.position.y) * 0.025;
+    camera.lookAt(0, camera.position.y * 0.5, 0);
+
+    // Icosahedron
+    ico.rotation.x = t * 0.12 + scrollFactor * 0.3;
+    ico.rotation.y = t * 0.08 + mouseX * 0.1;
+    ico.position.y = 0.5 + Math.sin(t * 0.4) * 0.4;
+
+    icoInner.rotation.x = -t * 0.15;
+    icoInner.rotation.y = -t * 0.1;
+    icoInner.position.y = ico.position.y;
+
+    // Torus
+    torus.rotation.x = t * 0.18 + scrollFactor * 0.2;
+    torus.rotation.y = t * 0.12;
+
+    // Torus Knot
+    torusKnot.rotation.x = t * 0.15;
+    torusKnot.rotation.y = t * 0.2;
+    torusKnot.position.y = -10 + Math.sin(t * 0.35) * 0.6;
+
+    // Octahedron
+    octa.rotation.x = t * 0.2;
+    octa.rotation.z = t * 0.08;
+    octa.position.y = -16 + Math.sin(t * 0.3) * 0.5;
+
+    // Dodecahedron
+    dodeca.rotation.x = t * 0.1;
+    dodeca.rotation.y = t * 0.14;
+    dodeca.position.y = -22 + Math.sin(t * 0.25) * 0.4;
+
+    // Rings
+    ring1.rotation.x = Math.PI * 0.4 + t * 0.15;
+    ring1.rotation.y = t * 0.25;
+    ring2.rotation.x = Math.PI * 0.3 + t * 0.1;
+    ring2.rotation.z = t * 0.2;
+
+    // Spheres
+    spheres.forEach(s => {
+      const d = s.userData;
+      s.position.y = d.baseY + Math.sin(t * d.speed + d.phase) * d.amplitude;
+      s.position.x = d.baseX + Math.cos(t * d.speed * 0.5 + d.phase) * 0.3;
+    });
+
+    // Lights orbit
+    pointLight1.position.x = Math.cos(t * 0.25) * 5;
+    pointLight1.position.y = Math.sin(t * 0.35) * 4;
+    pointLight2.position.x = Math.sin(t * 0.18) * 4;
+    pointLight2.position.z = Math.cos(t * 0.22) * 5;
+
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+</script>
+
+</body>
+</html>
