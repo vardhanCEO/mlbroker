@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- ── Stat cards ─────────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-xl-3">
+    <div class="mini-stat">
+      <span class="label">Portfolio Value</span>
+      <span class="value mono" id="s-equity">—</span>
+      <span class="sub" id="s-equity-sub">&nbsp;</span>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="mini-stat">
+      <span class="label">Buying Power</span>
+      <span class="value mono" id="s-bp">—</span>
+      <span class="sub text-muted">Cash available</span>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="mini-stat">
+      <span class="label">Day P&amp;L</span>
+      <span class="value mono" id="s-pnl">—</span>
+      <span class="sub" id="s-pnl-pct">&nbsp;</span>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="mini-stat">
+      <span class="label">Open Positions</span>
+      <span class="value mono" id="s-pos">—</span>
+      <span class="sub text-muted">Active trades</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Portfolio chart + Live BTC chart ──────────────────────────────────── -->
+<div class="row g-3 mb-3">
+  <!-- Portfolio history -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header">
+        Portfolio History
+        <div class="d-flex gap-1">
+          {% for p in ['1W','1M','3M','1A'] %}
+          <button class="btn btn-sm btn-outline-secondary period-btn {% if p=='1M' %}active{% endif %}"
+                  data-period="{{ p }}">{{ p }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="portfolio-chart" style="height:240px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live BTC/USD chart -->
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header">
+        <span>BTC/USD&nbsp;<span class="mono fw-bold" id="btc-price" style="color:var(--accent)">—</span></span>
+        <div class="d-flex align-items-center gap-2">
+          <span id="btc-live-badge" class="live-badge" style="display:none">
+            <span class="live-dot"></span>LIVE
+          </span>
+          <select id="btc-tf" class="form-select form-select-sm" style="width:90px">
+            <option value="1Min">1 Min</option>
+            <option value="15Min">15 Min</option>
+            <option value="1Hour">1 Hour</option>
+            <option value="1Day" selected>1 Day</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="btc-chart" style="height:240px">
+          <div class="chart-placeholder h-100">
+            <span class="spinner-border spinner-border-sm"></span>
+            <span>Loading…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Positions + Recent orders ─────────────────────────────────────────── -->
+<div class="row g-3">
+  <!-- Open positions -->
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header">
+        Open Positions
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadPositions()">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr>
+              <th>Symbol</th><th>Qty</th><th>Mkt Value</th><th>Unrealised P&L</th>
+            </tr></thead>
+            <tbody id="positions-table">
+              <tr><td colspan="4" class="text-center text-muted py-3">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent orders from DB -->
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header">
+        Recent Orders
+        <a href="{{ url_for('orders.index') }}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-list-check me-1"></i>All Orders
+        </a>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr>
+              <th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th>
+              <th>Status</th><th>Time</th>
+            </tr></thead>
+            <tbody id="recent-orders">
+              <tr><td colspan="6" class="text-center text-muted py-3">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* ── Portfolio chart ───────────────────────────────────────────────────── */
+let portfolioChart, portfolioSeries;
+
+function initPortfolioChart() {
+  const el = document.getElementById('portfolio-chart');
+  portfolioChart  = makeChart(el, 240);
+  portfolioSeries = portfolioChart.addAreaSeries({
+    lineColor: '#58a6ff', topColor: 'rgba(88,166,255,.2)',
+    bottomColor: 'rgba(88,166,255,.01)', lineWidth: 2, priceLineVisible: false,
+  });
+}
+
+async function loadPortfolio(period = '1M') {
+  const tfMap = {'1W':'1D','1M':'1D','3M':'1D','1A':'1W'};
+  try {
+    const r = await fetch(`/api/portfolio/history?period=${period}&timeframe=${tfMap[period]||'1D'}`);
+    const d = await r.json();
+    if (d.error || !d.timestamp) return;
+    const data = d.timestamp
+      .map((t, i) => ({ time: t, value: parseFloat(d.equity[i]) }))
+      .filter(x => x.value > 0);
+    portfolioSeries.setData(data);
+    portfolioChart.timeScale().fitContent();
+    const first = data[0]?.value, last = data[data.length-1]?.value;
+    const col = (!first || last >= first) ? '#3fb950' : '#f85149';
+    portfolioSeries.applyOptions({ lineColor: col, topColor: col+'33', bottomColor: col+'05' });
+  } catch {}
+}
+
+/* ── Account stats ─────────────────────────────────────────────────────── */
+async function loadAccount() {
+  try {
+    const r = await fetch('/api/account');
+    const d = await r.json();
+    if (d.error) return;
+    const eq   = parseFloat(d.equity || d.portfolio_value || 0);
+    const prev = parseFloat(d.last_equity || eq);
+    const pnl  = eq - prev;
+    const pct  = prev ? (pnl / prev) * 100 : 0;
+
+    document.getElementById('s-equity').textContent     = fmt.money(eq);
+    document.getElementById('s-equity-sub').textContent = 'Prev close: ' + fmt.money(prev);
+    document.getElementById('s-bp').textContent         = fmt.money(d.buying_power || d.cash);
+    const pnlEl = document.getElementById('s-pnl');
+    pnlEl.textContent = fmt.money(pnl);
+    pnlEl.className   = 'value mono ' + colorClass(pnl);
+    const pctEl = document.getElementById('s-pnl-pct');
+    pctEl.textContent = fmt.pct(pct);
+    pctEl.className   = 'sub ' + colorClass(pct);
+  } catch {}
+}
+
+/* ── Positions ─────────────────────────────────────────────────────────── */
+async function loadPositions() {
+  try {
+    const r = await fetch('/api/positions');
+    const d = await r.json();
+    const tbody = document.getElementById('positions-table');
+    document.getElementById('s-pos').textContent = d.length || '0';
+    if (!d.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No open positions</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.map(p => {
+      const pl  = parseFloat(p.unrealized_pl || 0);
+      const pct = parseFloat(p.unrealized_plpc || 0) * 100;
+      return `<tr>
+        <td class="mono fw-semibold">${p.symbol}</td>
+        <td class="mono">${parseFloat(p.qty).toFixed(6)}</td>
+        <td class="mono">${fmt.money(p.market_value)}</td>
+        <td class="mono ${colorClass(pl)}">${fmt.money(pl)} <span style="font-size:.75rem">(${fmt.pct(pct)})</span></td>
+      </tr>`;
+    }).join('');
+  } catch {}
+}
+
+/* ── Recent orders from DB ─────────────────────────────────────────────── */
+async function loadRecentOrders() {
+  try {
+    const r = await fetch('/api/orders/local?limit=15');
+    const d = await r.json();
+    const tbody = document.getElementById('recent-orders');
+    if (!d.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No orders yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.map(o => {
+      const sideBadge = o.side === 'buy'
+        ? '<span class="badge badge-buy px-2">BUY</span>'
+        : '<span class="badge badge-sell px-2">SELL</span>';
+      const statusColor = o.status === 'filled' ? 'badge-filled'
+        : o.status === 'rejected' ? 'badge-canceled'
+        : 'badge-open';
+      const dt = new Date(o.created_at).toLocaleString([], {month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      return `<tr>
+        <td class="mono fw-semibold">${o.symbol}</td>
+        <td>${sideBadge}</td>
+        <td class="text-muted">${o.order_type}</td>
+        <td class="mono">${o.qty}</td>
+        <td><span class="badge ${statusColor}">${o.status.toUpperCase()}</span></td>
+        <td class="text-muted" style="font-size:.78rem">${dt}</td>
+      </tr>`;
+    }).join('');
+  } catch {}
+}
+
+/* ── Live BTC chart ────────────────────────────────────────────────────── */
+let btcChart, btcCandles, btcVol, _btcPriceInterval = null;
+
+async function loadBtcChart(tf = '1Day') {
+  const el = document.getElementById('btc-chart');
+  el.innerHTML = '<div class="chart-placeholder h-100"><span class="spinner-border spinner-border-sm"></span></div>';
+
+  if (_btcPriceInterval) { clearInterval(_btcPriceInterval); _btcPriceInterval = null; }
+
+  try {
+    const r = await fetch(`/api/bars/BTC%2FUSD?timeframe=${tf}&limit=200`);
+    const d = await r.json();
+    const bars = d.bars || [];
+    if (!bars.length) { el.innerHTML = '<div class="chart-placeholder h-100"><span>No data</span></div>'; return; }
+
+    el.innerHTML = '';
+    btcChart   = makeChart(el, 240);
+    btcCandles = addCandles(btcChart);
+    btcVol     = addVolume(btcChart);
+
+    btcCandles.setData(bars.map(b => ({ time: b.t, open: b.o, high: b.h, low: b.l, close: b.c })));
+    btcVol.setData(bars.map(b => ({ time: b.t, value: b.v, color: b.c >= b.o ? '#3fb950' : '#f85149' })));
+    btcChart.timeScale().fitContent();
+
+    // Update price display from last bar
+    const last = bars[bars.length - 1];
+    document.getElementById('btc-price').textContent = fmt.money(last.c);
+    document.getElementById('btc-live-badge').style.display = '';
+
+    // Poll Alpaca for live price updates every 5 s
+    _btcPriceInterval = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/latest-bar/BTC%2FUSD');
+        const pd = await pr.json();
+        if (pd.error || !pd.bar) return;
+        const b  = pd.bar;
+        const isDaily = (tf === '1Day' || tf === '1Week' || tf === '1Month');
+        const t  = isDaily ? new Date(b.t).toISOString().slice(0, 10)
+                           : Math.floor(new Date(b.t).getTime() / 1000);
+        btcCandles.update({ time: t, open: b.o, high: b.h, low: b.l, close: b.c });
+        btcVol.update({ time: t, value: b.v, color: b.c >= b.o ? '#3fb950' : '#f85149' });
+        document.getElementById('btc-price').textContent = fmt.money(b.c);
+      } catch {}
+    }, 5000);
+  } catch (e) {
+    el.innerHTML = `<div class="chart-placeholder h-100"><span class="text-danger">${e.message}</span></div>`;
+  }
+}
+
+/* ── Period buttons ────────────────────────────────────────────────────── */
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadPortfolio(btn.dataset.period);
+  });
+});
+
+document.getElementById('btc-tf').addEventListener('change', function () {
+  loadBtcChart(this.value);
+});
+
+/* ── Init ──────────────────────────────────────────────────────────────── */
+initPortfolioChart();
+loadAccount();
+loadPositions();
+loadRecentOrders();
+loadPortfolio('1M');
+loadBtcChart('1Day');
+
+setInterval(loadPositions,    30_000);
+setInterval(loadRecentOrders, 30_000);
+setInterval(loadAccount,      60_000);
+</script>
+{% endblock %}

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account · AlphaPilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@700;800&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/main.css') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/auth.css') }}" rel="stylesheet">
+</head>
+<body class="auth-body">
+
+<div class="auth-bg">
+  <div class="auth-grid"></div>
+  <div class="auth-glow auth-glow-1"></div>
+  <div class="auth-glow auth-glow-2"></div>
+</div>
+
+<div class="auth-wrap">
+  <a href="{{ url_for('auth.login') }}" class="auth-brand">
+    <div class="auth-logo">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="16" height="11" rx="3" fill="#06060B" fill-opacity="0.85"/>
+        <rect x="6.5" y="7" width="4" height="3" rx="1" fill="#00F0FF" fill-opacity="0.9"/>
+        <rect x="13.5" y="7" width="4" height="3" rx="1" fill="#00F0FF" fill-opacity="0.9"/>
+        <polyline points="7,13 9,11.5 11,12.5 13,11 15,12 17,10.5" stroke="#00F0FF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="10" y="15" width="4" height="2" rx="1" fill="#06060B" fill-opacity="0.7"/>
+        <rect x="6" y="17" width="12" height="6" rx="2.5" fill="#06060B" fill-opacity="0.7"/>
+        <rect x="8" y="20" width="2" height="2" rx="0.5" fill="#7B61FF" fill-opacity="0.9"/>
+        <rect x="11" y="19" width="2" height="3" rx="0.5" fill="#7B61FF" fill-opacity="0.9"/>
+        <rect x="14" y="18" width="2" height="4" rx="0.5" fill="#00F0FF" fill-opacity="0.9"/>
+      </svg>
+    </div>
+    <span>AlphaPilot</span>
+  </a>
+
+  <div class="auth-card">
+    <div class="auth-card-header">
+      <h1 class="auth-title">Create account</h1>
+      <p class="auth-sub">Start trading with your own strategy dashboard</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+      <div class="auth-alert auth-alert-{{ cat }}">
+        <i class="bi bi-{{ 'check-circle' if cat=='success' else 'exclamation-circle' if cat=='danger' else 'info-circle' }}"></i>
+        {{ msg }}
+      </div>
+      {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <form method="post" autocomplete="on" novalidate>
+      <div class="auth-field">
+        <label class="auth-label">Username</label>
+        <div class="auth-input-wrap">
+          <i class="bi bi-at auth-input-icon"></i>
+          <input type="text" name="username" class="auth-input" placeholder="traderpro"
+                 autocomplete="username" minlength="3" required autofocus>
+        </div>
+      </div>
+
+      <div class="auth-field">
+        <label class="auth-label">Email</label>
+        <div class="auth-input-wrap">
+          <i class="bi bi-envelope auth-input-icon"></i>
+          <input type="email" name="email" class="auth-input" placeholder="you@example.com"
+                 autocomplete="email" required>
+        </div>
+      </div>
+
+      <div class="auth-field">
+        <label class="auth-label">Password</label>
+        <div class="auth-input-wrap">
+          <i class="bi bi-lock auth-input-icon"></i>
+          <input type="password" name="password" id="pw" class="auth-input"
+                 placeholder="Min. 8 characters" autocomplete="new-password"
+                 minlength="8" required oninput="checkStrength(this.value)">
+          <button type="button" class="auth-eye" onclick="togglePw('pw','eye-pw')">
+            <i class="bi bi-eye" id="eye-pw"></i>
+          </button>
+        </div>
+        <!-- Strength meter -->
+        <div class="pw-meter">
+          <div class="pw-bar" id="pw-bar"></div>
+        </div>
+        <span class="pw-label" id="pw-label"></span>
+      </div>
+
+      <div class="auth-field">
+        <label class="auth-label">Confirm Password</label>
+        <div class="auth-input-wrap">
+          <i class="bi bi-shield-lock auth-input-icon"></i>
+          <input type="password" name="confirm" id="pw2" class="auth-input"
+                 placeholder="Repeat password" autocomplete="new-password" required>
+          <button type="button" class="auth-eye" onclick="togglePw('pw2','eye-pw2')">
+            <i class="bi bi-eye" id="eye-pw2"></i>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="auth-btn">
+        <span>Create Account</span>
+        <i class="bi bi-arrow-right"></i>
+      </button>
+    </form>
+
+    <p class="auth-switch">
+      Already have an account?
+      <a href="{{ url_for('auth.login') }}">Sign in</a>
+    </p>
+  </div>
+</div>
+
+<script>
+function togglePw(id, iconId) {
+  const inp = document.getElementById(id);
+  const ico = document.getElementById(iconId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  ico.className = inp.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash';
+}
+
+function checkStrength(pw) {
+  const bar   = document.getElementById('pw-bar');
+  const label = document.getElementById('pw-label');
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+  const levels = [
+    { w: '20%',  color: '#f85149', text: 'Very weak'  },
+    { w: '40%',  color: '#d29922', text: 'Weak'       },
+    { w: '60%',  color: '#d29922', text: 'Fair'       },
+    { w: '80%',  color: '#3fb950', text: 'Strong'     },
+    { w: '100%', color: '#00F0FF', text: 'Very strong' },
+  ];
+  const lvl = levels[Math.min(score - 1, 4)] || levels[0];
+  bar.style.width       = pw.length ? lvl.w : '0';
+  bar.style.background  = lvl.color;
+  label.textContent     = pw.length ? lvl.text : '';
+  label.style.color     = lvl.color;
+}
+</script>
+</body>
+</html>

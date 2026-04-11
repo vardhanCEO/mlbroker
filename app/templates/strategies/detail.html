@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}{{ strategy.name }}{% endblock %}
+{% block page_title %}{{ strategy.name }}{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <!-- Strategy info card -->
+  <div class="col-lg-3">
+    <div class="card h-100">
+      <div class="card-header">Strategy Info</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0" style="font-size:.82rem">
+          <tr><td class="text-muted">Type</td>    <td><span class="type-badge">{{ strategy.type.replace('_',' ').title() }}</span></td></tr>
+          <tr><td class="text-muted">Symbol</td>  <td class="mono fw-semibold">{{ strategy.symbol }}</td></tr>
+          <tr><td class="text-muted">Timeframe</td><td>{{ strategy.timeframe }}</td></tr>
+          <tr><td class="text-muted">Status</td>  <td><span class="badge {% if strategy.is_active %}badge-filled{% else %}badge-canceled{% endif %}">
+            {{ 'Active' if strategy.is_active else 'Inactive' }}</span></td></tr>
+          <tr><td class="text-muted">Signals</td> <td class="mono">{{ strategy.signal_count }}</td></tr>
+          <tr><td class="text-muted">Created</td> <td class="text-muted">{{ strategy.created_at.strftime('%b %d, %Y') }}</td></tr>
+        </table>
+
+        <hr style="border-color:var(--border)">
+        <p class="text-muted mb-2" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em">Parameters</p>
+        {% for k, v in strategy.parameters.items() %}
+        <div class="d-flex justify-content-between mb-1" style="font-size:.82rem">
+          <span class="text-muted">{{ k.replace('_',' ').title() }}</span>
+          <span class="mono">{{ v }}</span>
+        </div>
+        {% endfor %}
+
+        <div class="d-grid gap-2 mt-3">
+          <button id="run-btn" class="btn btn-primary btn-sm" onclick="runStrategy()">
+            <i class="bi bi-play-fill me-1"></i> Run Strategy
+          </button>
+          <form action="{{ url_for('strategies.toggle', id=strategy.id) }}" method="post">
+            <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+              {% if strategy.is_active %}<i class="bi bi-pause-fill me-1"></i> Deactivate
+              {% else %}<i class="bi bi-play me-1"></i> Activate{% endif %}
+            </button>
+          </form>
+          <a href="{{ url_for('strategies.index') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Back
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="col-lg-9">
+    <div class="card mb-3">
+      <div class="card-header">
+        Price Chart
+        <div id="chart-info" class="text-muted" style="font-size:.78rem"></div>
+      </div>
+      <div class="card-body p-0">
+        <div id="main-chart" style="height:380px">
+          <div class="chart-placeholder h-100">
+            <i class="bi bi-bar-chart-line"></i>
+            <span>Click "Run Strategy" to load chart</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-chart for RSI / MACD -->
+    <div id="sub-chart-card" class="card" style="display:none">
+      <div class="card-header" id="sub-chart-label">Indicator</div>
+      <div class="card-body p-0">
+        <div id="sub-chart" style="height:160px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Signal history ──────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-header">
+    Signal History
+    <span class="badge bg-secondary bg-opacity-25 text-muted">{{ signals|length }}</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr><th>Action</th><th>Price</th><th>Signal Time</th><th>Executed</th><th>Order</th><th></th></tr>
+        </thead>
+        <tbody id="signal-history">
+          {% if signals %}
+          {% for sig in signals %}
+          <tr id="sig-{{ sig.id }}">
+            <td>
+              <span class="badge {% if sig.action=='buy' %}badge-buy{% else %}badge-sell{% endif %} px-2">
+                {{ sig.action.upper() }}
+              </span>
+            </td>
+            <td class="mono">{{ '${:,.2f}'.format(sig.price) }}</td>
+            <td class="text-muted">{{ sig.signal_time.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+              {% if sig.executed %}
+              <i class="bi bi-check-circle-fill text-success"></i>
+              {% else %}
+              <i class="bi bi-circle text-muted"></i>
+              {% endif %}
+            </td>
+            <td class="mono text-muted" style="font-size:.75rem">{{ sig.order_id[:8] + '…' if sig.order_id else '—' }}</td>
+            <td>
+              {% if not sig.executed %}
+              <button class="btn btn-xs btn-outline-secondary exec-btn"
+                      style="font-size:.72rem;padding:.15rem .5rem"
+                      data-id="{{ sig.id }}" data-action="{{ sig.action }}" data-symbol="{{ strategy.symbol }}">
+                Execute
+              </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No signals yet — click Run Strategy above.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const STRATEGY_ID = {{ strategy.id }};
+const STRATEGY_TYPE = '{{ strategy.type }}';
+
+let mainChart = null, candleSeries = null, subChart = null;
+
+async function runStrategy() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Running…';
+
+  try {
+    const r = await fetch(`/api/strategies/run/${STRATEGY_ID}?limit=500`);
+    const d = await r.json();
+    if (d.error) { toast('Error: ' + d.error, 'danger'); return; }
+
+    drawCharts(d);
+
+    const msg = `Loaded ${d.candles.length} bars · ${d.signals.length} signals · ${d.new_signals_count} new`;
+    document.getElementById('chart-info').textContent = msg;
+    toast(msg, 'success');
+
+    // Refresh signal history table if new signals
+    if (d.new_signals_count > 0) {
+      window.location.reload();
+    }
+  } catch(e) {
+    toast('Failed: ' + e.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Run Strategy';
+  }
+}
+
+function drawCharts(d) {
+  // Clear and rebuild main chart
+  const mainEl = document.getElementById('main-chart');
+  mainEl.innerHTML = '';
+  mainChart  = makeChart(mainEl, 380);
+  candleSeries = addCandles(mainChart);
+  const volSeries = addVolume(mainChart);
+
+  candleSeries.setData(d.candles);
+  volSeries.setData(d.volume);
+
+  // Indicators
+  const ind = d.indicators;
+  const COLORS = ['#58a6ff','#d29922','#e040fb','#26c6da'];
+  let ci = 0;
+
+  const lineOpts = (color) => ({
+    lineWidth: 1.5,
+    color,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  });
+
+  if (STRATEGY_TYPE === 'sma_crossover') {
+    const f = mainChart.addLineSeries(lineOpts(COLORS[0]));
+    const s = mainChart.addLineSeries(lineOpts(COLORS[1]));
+    f.setData(ind.fast_sma || []);
+    s.setData(ind.slow_sma || []);
+  }
+
+  if (STRATEGY_TYPE === 'bollinger') {
+    const u = mainChart.addLineSeries({ ...lineOpts('#58a6ff'), lineStyle: 2 });
+    const m = mainChart.addLineSeries(lineOpts('#7d8590'));
+    const l = mainChart.addLineSeries({ ...lineOpts('#58a6ff'), lineStyle: 2 });
+    u.setData(ind.bb_upper  || []);
+    m.setData(ind.bb_middle || []);
+    l.setData(ind.bb_lower  || []);
+  }
+
+  // Signal markers
+  if (d.signals.length) {
+    candleSeries.setMarkers(signalMarkers(d.signals));
+  }
+
+  mainChart.timeScale().fitContent();
+
+  // Sub-chart (RSI or MACD)
+  const subCard = document.getElementById('sub-chart-card');
+  const subEl   = document.getElementById('sub-chart');
+
+  if (STRATEGY_TYPE === 'rsi') {
+    subCard.style.display = '';
+    document.getElementById('sub-chart-label').textContent = 'RSI';
+    subEl.innerHTML = '';
+    subChart = makeChart(subEl, 160);
+    const rsiSeries = subChart.addLineSeries({ color: '#58a6ff', lineWidth: 1.5, priceLineVisible: false });
+    rsiSeries.setData(ind.rsi || []);
+    // overbought/oversold lines
+    const ob = subChart.addLineSeries({ color: '#f85149', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
+    const os = subChart.addLineSeries({ color: '#3fb950', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
+    if (ind.rsi?.length) {
+      const t0 = ind.rsi[0].time, tN = ind.rsi[ind.rsi.length-1].time;
+      ob.setData([{time:t0, value:70},{time:tN, value:70}]);
+      os.setData([{time:t0, value:30},{time:tN, value:30}]);
+    }
+    subChart.timeScale().fitContent();
+  }
+
+  if (STRATEGY_TYPE === 'macd') {
+    subCard.style.display = '';
+    document.getElementById('sub-chart-label').textContent = 'MACD';
+    subEl.innerHTML = '';
+    subChart = makeChart(subEl, 160);
+    const macdLine   = subChart.addLineSeries({ color: '#58a6ff', lineWidth: 1.5, priceLineVisible: false });
+    const sigLine    = subChart.addLineSeries({ color: '#d29922',  lineWidth: 1.5, priceLineVisible: false });
+    const histSeries = subChart.addHistogramSeries({
+      priceScaleId: '',
+      priceLineVisible: false,
+    });
+    macdLine.setData(ind.macd        || []);
+    sigLine.setData(ind.macd_signal  || []);
+    histSeries.setData((ind.macd_histogram || []).map(p => ({
+      ...p, color: p.value >= 0 ? '#3fb950' : '#f85149'
+    })));
+    subChart.timeScale().fitContent();
+  }
+}
+
+// Execute signal
+document.querySelectorAll('.exec-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const qty = prompt(`Execute ${btn.dataset.action.toUpperCase()} for ${btn.dataset.symbol}? Enter qty:`, '1');
+    if (!qty) return;
+    try {
+      const r = await fetch(`/api/signals/${btn.dataset.id}/execute`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({qty: parseFloat(qty)}),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      toast('Order placed: ' + (d.order?.id || ''), 'success');
+      btn.closest('tr').querySelector('td:nth-child(4)').innerHTML =
+        '<i class="bi bi-check-circle-fill text-success"></i>';
+      btn.remove();
+    } catch(e) {
+      toast('Failed: ' + e.message, 'danger');
+    }
+  });
+});
+</script>
+{% endblock %}

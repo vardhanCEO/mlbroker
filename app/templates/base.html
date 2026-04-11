@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Dashboard{% endblock %} · AlphaPilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/main.css') }}" rel="stylesheet">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <line x1="12" y1="1" x2="12" y2="4" stroke="#06060B" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="12" cy="1" r="1" fill="#06060B"/>
+        <rect x="4" y="4" width="16" height="11" rx="3" fill="#06060B" fill-opacity="0.85"/>
+        <rect x="6.5" y="7" width="4" height="3" rx="1" fill="#00F0FF" fill-opacity="0.9"/>
+        <rect x="13.5" y="7" width="4" height="3" rx="1" fill="#00F0FF" fill-opacity="0.9"/>
+        <polyline points="7,13 9,11.5 11,12.5 13,11 15,12 17,10.5" stroke="#00F0FF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="10" y="15" width="4" height="2" rx="1" fill="#06060B" fill-opacity="0.7"/>
+        <rect x="6" y="17" width="12" height="6" rx="2.5" fill="#06060B" fill-opacity="0.7"/>
+        <rect x="8" y="20" width="2" height="2" rx="0.5" fill="#7B61FF" fill-opacity="0.9"/>
+        <rect x="11" y="19" width="2" height="3" rx="0.5" fill="#7B61FF" fill-opacity="0.9"/>
+        <rect x="14" y="18" width="2" height="4" rx="0.5" fill="#00F0FF" fill-opacity="0.9"/>
+      </svg>
+    </div>
+    AlphaPilot
+  </div>
+
+  <nav class="sidebar-nav">
+    <ul>
+      <li>
+        <a href="{{ url_for('dashboard.index') }}"
+           class="nav-link {% if request.blueprint == 'dashboard' %}active{% endif %}">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('strategies.index') }}"
+           class="nav-link {% if request.blueprint == 'strategies' %}active{% endif %}">
+          <i class="bi bi-layers"></i> Strategies
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('market.index') }}"
+           class="nav-link {% if request.blueprint == 'market' %}active{% endif %}">
+          <i class="bi bi-bar-chart-line"></i> Market
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('orders.index') }}"
+           class="nav-link {% if request.blueprint == 'orders' %}active{% endif %}">
+          <i class="bi bi-list-check"></i> Orders
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('bot.index') }}"
+           class="nav-link {% if request.blueprint == 'bot' %}active{% endif %}">
+          <i class="bi bi-robot"></i> Bot
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div id="market-status-badge" class="status-badge">
+      <span class="status-dot"></span>
+      <span class="status-text">Loading…</span>
+    </div>
+  </div>
+</aside>
+
+<!-- Sidebar overlay (mobile) -->
+<div id="sidebar-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:199;"
+     onclick="closeSidebar()"></div>
+
+<!-- ── Main wrapper ────────────────────────────────────────────────────── -->
+<div class="main-wrapper">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="d-flex align-items-center gap-3">
+      <!-- Hamburger -->
+      <div class="hamburger" id="hamburger" onclick="toggleSidebar()">
+        <span></span><span></span><span></span>
+      </div>
+      <h2 class="page-title">{% block page_title %}{% endblock %}</h2>
+    </div>
+
+    <div class="topbar-right">
+      <div class="topbar-stat">
+        <span class="stat-label">Portfolio</span>
+        <span class="stat-val mono" id="header-equity">—</span>
+      </div>
+      <div class="topbar-stat">
+        <span class="stat-label">Day P&amp;L</span>
+        <span class="stat-val mono" id="header-pnl">—</span>
+      </div>
+      <span class="paper-badge">PAPER</span>
+
+      <!-- User menu -->
+      {% if current_user.is_authenticated %}
+      <div style="position:relative">
+        <button class="user-menu-btn" id="user-menu-btn" onclick="toggleUserMenu(event)">
+          <div class="user-avatar">{{ current_user.username[0].upper() }}</div>
+          <span>{{ current_user.username }}</span>
+          <i class="bi bi-chevron-down" style="font-size:.6rem;color:var(--muted)"></i>
+        </button>
+        <div class="user-dropdown" id="user-dropdown">
+          <div class="user-dropdown-info">
+            <div class="ud-name">{{ current_user.username }}</div>
+            <div class="ud-email">{{ current_user.email }}</div>
+          </div>
+          <a href="{{ url_for('auth.logout') }}" class="user-dropdown-item danger">
+            <i class="bi bi-box-arrow-right"></i> Sign Out
+          </a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- Live ticker strip -->
+  <div class="ticker-bar" id="ticker-bar">
+    <div class="ticker-track"></div>
+  </div>
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="px-4 pt-3">
+    {% for cat, msg in messages %}
+    <div class="alert alert-{{ 'success' if cat=='success' else 'info' if cat=='info' else 'danger' }} alert-dismissible fade show" role="alert">
+      {{ msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <!-- Page content -->
+  <main class="page-content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="position-fixed bottom-0 end-0 p-3" style="z-index:9999"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.7/dist/lightweight-charts.standalone.production.js"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+/* ── User dropdown ───────────────────────────────────────────── */
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  document.getElementById('user-dropdown').classList.toggle('open');
+}
+document.addEventListener('click', () => {
+  document.getElementById('user-dropdown')?.classList.remove('open');
+});
+
+/* ── Mobile sidebar ──────────────────────────────────────────── */
+function toggleSidebar() {
+  const sb  = document.getElementById('sidebar');
+  const ov  = document.getElementById('sidebar-overlay');
+  const isOpen = sb.classList.toggle('open');
+  ov.style.display = isOpen ? 'block' : 'none';
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').style.display = 'none';
+}
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+{% block title %}Orders{% endblock %}
+{% block page_title %}Orders{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <!-- ── Place Order ───────────────────────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header">Place Order</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">Symbol</label>
+          <input type="text" id="o-symbol" class="form-control" placeholder="AAPL or BTC/USD">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Side</label>
+          <div class="d-flex gap-2">
+            <button class="btn btn-success flex-fill side-btn active" data-side="buy" id="btn-buy">Buy</button>
+            <button class="btn btn-outline-secondary flex-fill side-btn" data-side="sell" id="btn-sell">Sell</button>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Order Type</label>
+          <select id="o-type" class="form-select">
+            <option value="market">Market</option>
+            <option value="limit">Limit</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Quantity</label>
+          <input type="number" id="o-qty" class="form-control" placeholder="1" min="0.0001" step="any">
+        </div>
+        <div class="mb-3" id="limit-price-row" style="display:none">
+          <label class="form-label">Limit Price</label>
+          <input type="number" id="o-price" class="form-control" placeholder="0.00" step="any">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Time in Force</label>
+          <select id="o-tif" class="form-select">
+            <option value="gtc" selected>GTC (Good Till Cancelled)</option>
+            <option value="ioc">IOC (Immediate or Cancel)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary w-100" id="submit-order">
+          <i class="bi bi-send me-1"></i> Submit Order
+        </button>
+      </div>
+    </div>
+
+    <!-- Account snapshot -->
+    <div class="card mt-3">
+      <div class="card-header">Account Snapshot</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0" id="snap-table">
+          <tbody>
+            <tr><td class="text-muted">Equity</td><td id="sn-equity" class="text-end mono">—</td></tr>
+            <tr><td class="text-muted">Cash</td><td id="sn-cash" class="text-end mono">—</td></tr>
+            <tr><td class="text-muted">Buying Power</td><td id="sn-bp" class="text-end mono">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Orders panel ──────────────────────────────────────────────────── -->
+  <div class="col-lg-8">
+    <!-- Tabs -->
+    <ul class="nav mb-2" id="order-tabs">
+      <li class="nav-item">
+        <button class="btn btn-sm btn-outline-secondary me-1 active" id="tab-open" onclick="switchTab('open')">
+          Open Orders
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="btn btn-sm btn-outline-secondary me-1" id="tab-history" onclick="switchTab('history')">
+          Alpaca History
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="btn btn-sm btn-outline-secondary" id="tab-log" onclick="switchTab('log')">
+          <i class="bi bi-database me-1"></i>DB Log
+        </button>
+      </li>
+    </ul>
+
+    <!-- Open orders -->
+    <div id="pane-open" class="card mb-3">
+      <div class="card-header">
+        Open Orders
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadOrders()"><i class="bi bi-arrow-clockwise"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" style="color:var(--red);border-color:var(--red)" onclick="cancelAll()">Cancel All</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr>
+              <th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Filled</th><th>Limit</th><th>Status</th><th>Time</th><th></th>
+            </tr></thead>
+            <tbody id="open-orders"><tr><td colspan="9" class="text-center text-muted py-3">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alpaca history -->
+    <div id="pane-history" class="card mb-3" style="display:none">
+      <div class="card-header">
+        Alpaca Order History
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Avg Fill</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody id="order-history"><tr><td colspan="7" class="text-center text-muted py-3">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DB log -->
+    <div id="pane-log" class="card" style="display:none">
+      <div class="card-header">
+        DB Order Log
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadDbLog()"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr><th>#</th><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Limit</th><th>Status</th><th>Alpaca ID</th><th>Submitted</th></tr></thead>
+            <tbody id="db-log"><tr><td colspan="9" class="text-center text-muted py-3">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedSide = 'buy';
+
+// Side buttons
+document.querySelectorAll('.side-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedSide = btn.dataset.side;
+    document.querySelectorAll('.side-btn').forEach(b => {
+      b.className = 'btn flex-fill side-btn btn-outline-secondary';
+    });
+    btn.className = `btn flex-fill side-btn ${selectedSide === 'buy' ? 'btn-success' : 'btn-danger'}`;
+  });
+});
+
+// Show/hide limit price
+document.getElementById('o-type').addEventListener('change', function() {
+  document.getElementById('limit-price-row').style.display =
+    this.value === 'limit' ? '' : 'none';
+});
+
+// Submit order
+document.getElementById('submit-order').addEventListener('click', async () => {
+  const sym   = document.getElementById('o-symbol').value.trim().toUpperCase();
+  const qty   = document.getElementById('o-qty').value;
+  const type  = document.getElementById('o-type').value;
+  const tif   = document.getElementById('o-tif').value;
+  const price = document.getElementById('o-price').value;
+
+  if (!sym || !qty) { toast('Symbol and quantity are required', 'danger'); return; }
+
+  const btn = document.getElementById('submit-order');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Submitting…';
+
+  try {
+    const payload = { symbol: sym, qty, side: selectedSide, type, time_in_force: tif };
+    if (type === 'limit' && price) payload.limit_price = price;
+
+    const r = await fetch('/api/orders/place', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    toast(`Order submitted: ${sym} ${selectedSide.toUpperCase()} ${qty}`, 'success');
+    loadOrders();
+  } catch(e) {
+    toast('Order failed: ' + e.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send me-1"></i> Submit Order';
+  }
+});
+
+// Load open orders
+async function loadOrders() {
+  try {
+    const r = await fetch('/api/orders?status=open&limit=50');
+    const d = await r.json();
+    const tbody = document.getElementById('open-orders');
+    if (!d.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">No open orders</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.map(o => {
+      const side = o.side || '';
+      const badge = side === 'buy'
+        ? '<span class="badge badge-buy px-2">BUY</span>'
+        : '<span class="badge badge-sell px-2">SELL</span>';
+      const dt = new Date(o.submitted_at || o.created_at).toLocaleString();
+      return `<tr>
+        <td class="mono fw-semibold">${o.symbol}</td>
+        <td>${badge}</td>
+        <td class="text-muted">${o.type}</td>
+        <td class="mono">${parseFloat(o.qty||0)}</td>
+        <td class="mono text-muted">${parseFloat(o.filled_qty||0)}</td>
+        <td class="mono">${o.limit_price ? fmt.money(o.limit_price) : '—'}</td>
+        <td><span class="badge badge-open">${o.status}</span></td>
+        <td class="text-muted" style="font-size:.78rem">${dt}</td>
+        <td>
+          <button class="btn btn-xs btn-outline-secondary cancel-btn"
+                  style="font-size:.72rem;padding:.15rem .5rem;color:var(--red);border-color:var(--red)"
+                  data-id="${o.id}">Cancel</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    // Cancel buttons
+    document.querySelectorAll('.cancel-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          await fetch(`/api/orders/${btn.dataset.id}/cancel`, { method: 'DELETE' });
+          toast('Order cancelled', 'info');
+          loadOrders();
+        } catch(e) { toast('Failed: ' + e.message, 'danger'); btn.disabled = false; }
+      });
+    });
+  } catch(e) { console.error(e); }
+}
+
+// Cancel all
+async function cancelAll() {
+  if (!confirm('Cancel all open orders?')) return;
+  try {
+    await fetch('/api/orders/cancel-all', { method: 'DELETE' });
+    toast('All orders cancelled', 'info');
+    loadOrders();
+  } catch(e) { toast('Failed: ' + e.message, 'danger'); }
+}
+
+// Load history
+async function loadHistory() {
+  try {
+    const r = await fetch('/api/orders?status=all&limit=50');
+    const d = await r.json();
+    const tbody = document.getElementById('order-history');
+    const closed = d.filter(o => o.status !== 'new' && o.status !== 'partially_filled' && o.status !== 'accepted');
+    if (!closed.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No closed orders</td></tr>';
+      return;
+    }
+    tbody.innerHTML = closed.map(o => {
+      const side  = o.side || '';
+      const badge = side === 'buy'
+        ? '<span class="badge badge-buy px-2">BUY</span>'
+        : '<span class="badge badge-sell px-2">SELL</span>';
+      const statusBadge = o.status === 'filled'
+        ? '<span class="badge badge-filled">FILLED</span>'
+        : `<span class="badge badge-canceled">${o.status.toUpperCase()}</span>`;
+      const dt = new Date(o.filled_at || o.submitted_at || o.created_at).toLocaleDateString();
+      return `<tr>
+        <td class="mono fw-semibold">${o.symbol}</td>
+        <td>${badge}</td>
+        <td class="text-muted">${o.type}</td>
+        <td class="mono">${parseFloat(o.qty||0)}</td>
+        <td class="mono">${o.filled_avg_price ? fmt.money(o.filled_avg_price) : '—'}</td>
+        <td>${statusBadge}</td>
+        <td class="text-muted">${dt}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+// Account snapshot
+async function loadSnapshot() {
+  try {
+    const r = await fetch('/api/account');
+    const d = await r.json();
+    document.getElementById('sn-equity').textContent = fmt.money(d.equity || d.portfolio_value);
+    document.getElementById('sn-cash').textContent   = fmt.money(d.cash);
+    document.getElementById('sn-bp').textContent     = fmt.money(d.buying_power);
+  } catch {}
+}
+
+/* ── Tab switch ────────────────────────────────────────────────────────── */
+function switchTab(tab) {
+  ['open','history','log'].forEach(t => {
+    document.getElementById(`pane-${t}`).style.display = t === tab ? '' : 'none';
+    document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+  });
+  if (tab === 'history') loadHistory();
+  if (tab === 'log')     loadDbLog();
+}
+
+/* ── DB log ────────────────────────────────────────────────────────────── */
+async function loadDbLog() {
+  try {
+    const r = await fetch('/api/orders/local?limit=100');
+    const d = await r.json();
+    const tbody = document.getElementById('db-log');
+    if (!d.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">No orders in DB yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.map(o => {
+      const sideBadge = o.side === 'buy'
+        ? '<span class="badge badge-buy px-2">BUY</span>'
+        : '<span class="badge badge-sell px-2">SELL</span>';
+      const stColor = o.status === 'filled' ? 'badge-filled'
+        : o.status === 'rejected' || o.status === 'canceled' ? 'badge-canceled' : 'badge-open';
+      const dt = new Date(o.created_at).toLocaleString([], {month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const aid = o.alpaca_id ? `<span class="mono text-muted" style="font-size:.72rem">${o.alpaca_id.slice(0,8)}…</span>` : '—';
+      return `<tr>
+        <td class="text-muted">${o.id}</td>
+        <td class="mono fw-semibold">${o.symbol}</td>
+        <td>${sideBadge}</td>
+        <td class="text-muted">${o.order_type}</td>
+        <td class="mono">${o.qty}</td>
+        <td class="mono">${o.limit_price ? fmt.money(o.limit_price) : '—'}</td>
+        <td><span class="badge ${stColor}">${o.status.toUpperCase()}</span></td>
+        <td>${aid}</td>
+        <td class="text-muted" style="font-size:.78rem">${dt}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+loadOrders();
+loadHistory();
+loadSnapshot();
+setInterval(loadOrders, 30_000);
+</script>
+{% endblock %}

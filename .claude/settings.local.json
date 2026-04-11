@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PGPASSWORD=\"test@123\" \"/c/Program Files/PostgreSQL/17/bin/psql.exe\" -U postgres -h localhost -c \"SELECT 1;\")",
+      "Bash(PGPASSWORD=\"test@123\" \"/c/Program Files/PostgreSQL/17/bin/psql.exe\" -U postgres -h localhost -c \"CREATE DATABASE mlbroker;\")",
+      "Bash(curl -s http://localhost:5000/)",
+      "Read(//c/Users/VARDHAN/Desktop/mlbroker/**)",
+      "Bash(python3 -c ':*)",
+      "Bash(grep -o '\"content\":\\\\[{\"type\":\"text\",\"text\":\"[^\"]*\"')",
+      "Bash(grep -oP '\"role\":\"user\",\"content\":\\\\[.*?\"text\":\"[^\"]{1,500}')",
+      "Bash(grep -o '\"text\":\"[^\"\\\\\\\\]*\\\\\\\\[^\"]*\"')",
+      "Bash(flask shell -c ':*)",
+      "Bash(venv/Scripts/pip install:*)",
+      "Bash(venv/Scripts/python -c \"from app import create_app; app = create_app\\(\\); print\\('OK'\\)\")"
+    ]
+  }
+}
