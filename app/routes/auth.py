@@ -16,9 +16,10 @@ def login():
         password   = request.form.get('password', '')
         remember   = bool(request.form.get('remember'))
 
-        # Accept either username or e-mail
-        user = (User.query.filter_by(email=identifier).first()
-                or User.query.filter_by(username=identifier).first())
+        # Try email first, then username — fall through if password doesn't match
+        user = User.query.filter_by(email=identifier.lower()).first()
+        if not (user and user.check_password(password)):
+            user = User.query.filter_by(username=identifier).first()
 
         if user and user.check_password(password):
             login_user(user, remember=remember)

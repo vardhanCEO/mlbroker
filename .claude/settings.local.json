@@ -11,7 +11,14 @@
       "Bash(grep -o '\"text\":\"[^\"\\\\\\\\]*\\\\\\\\[^\"]*\"')",
       "Bash(flask shell -c ':*)",
       "Bash(venv/Scripts/pip install:*)",
-      "Bash(venv/Scripts/python -c \"from app import create_app; app = create_app\\(\\); print\\('OK'\\)\")"
+      "Bash(venv/Scripts/python -c \"from app import create_app; app = create_app\\(\\); print\\('OK'\\)\")",
+      "Bash('/c/Program Files/PostgreSQL/17/bin/psql.exe' -U postgres -h localhost -c ' *)",
+      "Bash('/c/Program Files/PostgreSQL/17/bin/psql.exe' -U postgres -h localhost -d mlbroker -c ' *)",
+      "Bash(PGPASSWORD='test@123' \"/c/Program Files/PostgreSQL/17/bin/psql.exe\" -U agadmin -h localhost -d mlbroker -c \"\\\\dt\")",
+      "Bash(PGPASSWORD='test@123' \"/c/Program Files/PostgreSQL/17/bin/psql.exe\" -U agadmin -h localhost -d mlbroker -c \"\\\\ds\")",
+      "Bash(grep -E \"\\\\.\\(py|txt|html|json|md|yml|yaml\\)$|^\\\\.\\\\/[^/]+$\")",
+      "Bash(grep -E \"\\\\.\\(py|html|txt|json|yml|yaml|md\\)$\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\VARDHAN\\\\.claude\\\\projects\\\\c--Users-VARDHAN-Desktop-mlbroker\\\\memory\\\\\" | ForEach-Object { Write-Host \"=== $\\($_.Name\\) ===\"; Get-Content $_.FullName })"
     ]
   }
 }

@@ -3,6 +3,7 @@ Alpaca API wrapper — crypto only, using the official alpaca-py SDK.
 Max bars: 10,000 per request (Alpaca crypto API limit).
 """
 import json
+import datetime
 import requests as _requests
 from flask import current_app
 
@@ -22,7 +23,7 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 MAX_BARS = 10_000   # Alpaca crypto API hard limit per request
 
 TICKER_PAIRS = [
-    'BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD',
+    'BTC/USD', 'ETH/USD', 'SOL/USD',
     'AVAX/USD', 'DOGE/USD', 'XRP/USD', 'LINK/USD',
 ]
 
@@ -170,14 +171,21 @@ class AlpacaClient:
 
     # ── Crypto bars ──────────────────────────────────────────────────────────
 
-    def get_bars(self, symbol, timeframe='1Day', limit=500):
+    def get_bars(self, symbol, timeframe='1Day', limit=500, start=None, end=None):
         """
         Fetch up to MAX_BARS (10,000) crypto bars for symbol.
         symbol must be in Alpaca crypto format, e.g. 'BTC/USD'.
+        start/end: datetime objects for date range.
         """
         limit = min(int(limit), MAX_BARS)
         tf = _TF_MAP.get(timeframe, TimeFrame.Day)
-        req = CryptoBarsRequest(symbol_or_symbols=symbol, timeframe=tf, limit=limit)
+        req = CryptoBarsRequest(
+            symbol_or_symbols=symbol, 
+            timeframe=tf, 
+            limit=limit,
+            start=start,
+            end=end
+        )
         bar_set = self.crypto_data.get_crypto_bars(req)
         return {'bars': _bars_to_list(bar_set, symbol, timeframe), 'symbol': symbol}
 

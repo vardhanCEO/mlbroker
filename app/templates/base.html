@@ -63,8 +63,14 @@
       </li>
       <li>
         <a href="{{ url_for('bot.index') }}"
-           class="nav-link {% if request.blueprint == 'bot' %}active{% endif %}">
+           class="nav-link {% if request.endpoint == 'bot.index' %}active{% endif %}">
           <i class="bi bi-robot"></i> Bot
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('bot.chart') }}"
+           class="nav-link {% if request.endpoint == 'bot.chart' %}active{% endif %}">
+          <i class="bi bi-graph-up-arrow"></i> Chart
         </a>
       </li>
     </ul>
@@ -182,5 +188,6 @@ function closeSidebar() {
 }
 </script>
 {% block extra_js %}{% endblock %}
+{% block modals %}{% endblock %}
 </body>
 </html>

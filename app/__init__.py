@@ -17,6 +17,7 @@ def create_app(config_class=Config):
         from .models.order import Order                # noqa
         from .models.binary_trade import BinaryTrade   # noqa
         from .models.bot_trade import BotTrade         # noqa
+        from .models.ml_model import MLModel, MLSignal # noqa
         db.create_all()
 
     from .routes.auth import auth_bp

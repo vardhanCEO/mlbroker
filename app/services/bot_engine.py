@@ -21,14 +21,14 @@ _lock = threading.Lock()
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def start_bot_trade(app, user_id: int, symbol: str, amount_usd: float):
+def start_bot_trade(app, user_id: int, symbol: str, amount_usd: float,
+                    direction: str = 'long'):
     """
-    Create a BotTrade record, place a market BUY via Alpaca SDK, then
-    schedule the SELL exactly 15 minutes after the buy is confirmed.
+    Create a BotTrade record, place the entry order via Alpaca, then
+    schedule the exit exactly 15 minutes later.
+    direction='long'  → BUY entry, SELL exit  (price going up)
+    direction='short' → SELL entry, BUY exit  (price going down)
     Returns (trade_id, error_str).  On success error_str is None.
-
-    Price is fetched from Alpaca's latest-bar endpoint (not Binance) so the
-    entire flow is driven by the Alpaca SDK.
     """
     from ..models.bot_trade import BotTrade
     from ..extensions import db
@@ -50,6 +50,7 @@ def start_bot_trade(app, user_id: int, symbol: str, amount_usd: float):
             user_id=user_id, symbol=symbol,
             qty=est_qty,          # estimated; updated to actual fill qty later
             amount_usd=amount_usd,
+            direction=direction,
             sell_at=sell_at, status='buying',
         )
         db.session.add(trade)
@@ -167,17 +168,18 @@ def _buy_then_schedule(app, trade_id: int):
 
             client = AlpacaClient()
 
+            entry_side = 'buy' if (trade.direction or 'long') == 'long' else 'sell'
             # ── Notional order: Alpaca resolves qty at execution time ──────
             order = client.place_order(
                 symbol=trade.symbol,
                 notional=trade.amount_usd,   # <── USD amount, not qty
-                side='buy',
+                side=entry_side,
                 order_type='market',
                 time_in_force='gtc',
             )
             trade.buy_order_id = order['id']
             _log(trade,
-                 f'BUY submitted via Alpaca SDK — '
+                 f'{entry_side.upper()} (entry) submitted via Alpaca SDK — '
                  f'order_id={order["id"]} initial_status={order.get("status")}')
             db.session.commit()
 
@@ -239,17 +241,18 @@ def _sell_trade(app, trade_id: int):
 
         try:
             client = AlpacaClient()
-            # ── Qty-based SELL (we know the exact filled qty from the buy) ─
+            exit_side = 'sell' if (trade.direction or 'long') == 'long' else 'buy'
+            # ── Qty-based exit (we know the exact filled qty from the entry) ─
             order = client.place_order(
                 symbol=trade.symbol,
-                qty=sell_qty,          # exact qty from buy fill
-                side='sell',
+                qty=sell_qty,          # exact qty from entry fill
+                side=exit_side,
                 order_type='market',
                 time_in_force='gtc',
             )
             trade.sell_order_id = order['id']
             _log(trade,
-                 f'SELL submitted via Alpaca SDK — '
+                 f'{exit_side.upper()} (exit) submitted via Alpaca SDK — '
                  f'order_id={order["id"]} initial_status={order.get("status")}')
             db.session.commit()
 
@@ -267,8 +270,12 @@ def _sell_trade(app, trade_id: int):
 
             # P&L
             if trade.buy_price and trade.sell_price:
-                trade.profit     = round((trade.sell_price - trade.buy_price) * sell_qty, 4)
-                trade.profit_pct = round((trade.sell_price - trade.buy_price) / trade.buy_price * 100, 4)
+                if (trade.direction or 'long') == 'long':
+                    trade.profit = round((trade.sell_price - trade.buy_price) * sell_qty, 4)
+                    trade.profit_pct = round((trade.sell_price - trade.buy_price) / trade.buy_price * 100, 4)
+                else:  # short: profit when entry sell > exit buy
+                    trade.profit = round((trade.buy_price - trade.sell_price) * sell_qty, 4)
+                    trade.profit_pct = round((trade.buy_price - trade.sell_price) / trade.buy_price * 100, 4)
                 sign = '+' if trade.profit >= 0 else ''
                 _log(trade,
                     f'P&L: {sign}${trade.profit:.4f} ({sign}{trade.profit_pct:.4f}%)')

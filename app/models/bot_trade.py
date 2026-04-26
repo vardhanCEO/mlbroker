@@ -15,6 +15,8 @@ class BotTrade(db.Model):
     filled_qty    = db.Column(db.Float, nullable=True)
     sell_at       = db.Column(db.DateTime, nullable=False)
     sold_at       = db.Column(db.DateTime, nullable=True)
+    direction     = db.Column(db.String(10), default='long')
+    # direction: long (buy→sell) | short (sell→buy)
     status        = db.Column(db.String(20), default='buying')
     # statuses: buying | active | selling | completed | error | cancelled
     profit        = db.Column(db.Float, nullable=True)
@@ -36,6 +38,7 @@ class BotTrade(db.Model):
             'filled_qty':   self.filled_qty,
             'sell_at':      self.sell_at.isoformat() + 'Z',
             'sold_at':      self.sold_at.isoformat() + 'Z' if self.sold_at else None,
+            'direction':    self.direction or 'long',
             'status':       self.status,
             'profit':       self.profit,
             'profit_pct':   self.profit_pct,
